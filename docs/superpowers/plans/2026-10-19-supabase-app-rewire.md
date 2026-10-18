@@ -404,7 +404,7 @@ This task is gated on the owner explicitly confirming, after Task 4, that the Su
 
 - [ ] **Step 1: Update the docs**
 
-`PRODUCT.md:19` "a real API + MySQL database" → "a real API + Postgres (Supabase) database". `README.md`: replace the XAMPP/MySQL setup steps with the Supabase connection steps (`DATABASE_URL`, `npm install`, `npm run seed`, `npm run dev`) and add one line stating the rollback path (restore `DB_*` + `npm install mysql2`). `.env.example`: drop the `DB_*` block.
+`PRODUCT.md:19` "a real API + MySQL database" → "a real API + Postgres (Supabase) database". `README.md`: replace the XAMPP/MySQL setup steps with the Supabase connection steps (`DATABASE_URL`, `npm install`, `npm run seed`, `npm run dev`) and add one line stating the rollback path (restore `DB_*` + `npm install mysql2`). `.env.example`: **done differently on purpose** — the `DB_*` block stays, because `config/db.js` still reads it as the fallback and it documents the rollback path; only the comment and `DB_PORT` were added.
 
 - [ ] **Step 2: Remove the MySQL driver**
 
