@@ -3,6 +3,10 @@ export const errorHandler = (err, req, res, next) => {
   if (err.name === 'ValidationError') {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: err.message, details: err.details } });
   }
+  if (err.name === 'MulterError') {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (max 10 MB)' : err.message;
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message } });
+  }
   if (err.name === 'UnauthorizedError') {
     return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: err.message } });
   }

@@ -2,32 +2,14 @@ import pool from '../config/db.js';
 
 export async function generateReportReference() {
   const year = new Date().getFullYear();
+  const prefix = `RA-${year}-`;
+  // Highest existing number for the year + 1, so deleting a row never causes a reused reference.
   const [rows] = await pool.query(
-    'SELECT COUNT(*) as cnt FROM reports WHERE YEAR(created_at) = ?',
-    [year]
+    'SELECT MAX(CAST(SUBSTRING(report_reference, ?) AS UNSIGNED)) AS maxn FROM reports WHERE report_reference LIKE ?',
+    [prefix.length + 1, `${prefix}%`]
   );
-  const next = (rows[0].cnt || 0) + 1;
-  return `RA-${year}-${String(next).padStart(6, '0')}`;
-}
-
-export function buildReportQuery(user) {
-  let query = `
-    SELECT r.*, u.name as reporter_name, u.email as reporter_email,
-           ac.name as category_name
-    FROM reports r
-    JOIN users u ON r.reporter_id = u.id
-    LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
-  `;
-  const params = [];
-  if (user.role === 'reporter') {
-    query += ' WHERE r.reporter_id = ?';
-    params.push(user.id);
-  } else if (user.role === 'traffic_officer') {
-    query += ' WHERE r.assigned_to = ? OR r.status IN (?, ?)';
-    params.push(user.id, 'submitted', 'under_review');
-  }
-  query += ' ORDER BY r.created_at DESC';
-  return { query, params };
+  const next = (Number(rows[0].maxn) || 0) + 1;
+  return `${prefix}${String(next).padStart(6, '0')}`;
 }
 
 export function logAudit(userId, action, entityType, entityId, req, details = null) {
