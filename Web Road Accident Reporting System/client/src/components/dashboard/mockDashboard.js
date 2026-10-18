@@ -42,6 +42,12 @@ export function mockDashboard({ year, compareYear, scope }) {
     byInjury: pct({ none: 80, injuries: 70, fatalities: 14, unknown: 10 }),
     byType: pct({ 'Vehicle Collision': 90, 'Motorcycle Accident': 60, 'Hit and Run': 25, 'Pedestrian Accident': 18, Other: 8 }),
     byVehicle: pct({ Motorcycle: 70, Car: 55, Tricycle: 30, Truck: 18, 'Bus/Jeepney': 12, Bicycle: 6 }),
-    locations, needsAttention
+    locations, needsAttention,
+    reportList: Array.from({ length: 24 }, (_, i) => ({
+      id: 100 + i, report_reference: `RA-${year}-${String(100 + i).padStart(6, '0')}`, title: 'Sample report',
+      status: ['submitted', 'under_review', 'verified', 'assigned', 'in_progress', 'resolved', 'rejected'][i % 7],
+      category_name: ['Vehicle Collision', 'Hit and Run', 'Motorcycle Accident', 'Pedestrian Accident'][i % 4],
+      location: `Brgy. Sample ${(i % 4) + 1}`, created_at: new Date(Date.now() - i * 3 * 86400000).toISOString()
+    }))
   };
 }

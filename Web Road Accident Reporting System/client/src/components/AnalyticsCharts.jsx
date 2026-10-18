@@ -1,27 +1,29 @@
-import { useEffect, useState } from 'react';
 import {
-  ComposedChart, Bar, Line, Cell, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ReferenceDot,
 } from 'recharts';
+import { useThemeColors } from '../theme';
 
-/* Light "Analytics" kit: icons, chart pieces and helpers. Recharts is the library Tremor is built on. */
+/* Analytics kit. Every colour comes from the app's design tokens (index.css), so the page follows
+   the light/dark toggle like the rest of the site. Recharts needs concrete colour strings for SVG
+   attributes, so those come from useThemeColors(); plain HTML uses hsl(var(--token)) directly. */
 
-export const RED = '#e5383b';
 export const STAGES = [
-  ['submitted', 'Submitted', '#94a3b8'],
-  ['under_review', 'Under review', '#f59e0b'],
-  ['needs_clarification', 'Needs clarification', '#f97316'],
-  ['verified', 'Verified', '#06b6d4'],
-  ['assigned', 'Assigned', '#8b5cf6'],
-  ['in_progress', 'In progress', '#3b82f6'],
-  ['resolved', 'Resolved', '#10b981'],
-  ['rejected', 'Rejected', '#ef4444'],
+  ['submitted', 'Submitted'],
+  ['under_review', 'Under review'],
+  ['needs_clarification', 'Needs clarification'],
+  ['verified', 'Verified'],
+  ['assigned', 'Assigned'],
+  ['in_progress', 'In progress'],
+  ['resolved', 'Resolved'],
+  ['rejected', 'Rejected'],
 ];
 export const STAGE_PROGRESS = {
   submitted: 15, under_review: 30, needs_clarification: 30, verified: 50,
   assigned: 65, in_progress: 80, resolved: 100, rejected: 0,
 };
 export const stageLabel = (k) => STAGES.find((s) => s[0] === k)?.[1] || String(k).replace(/_/g, ' ');
-export const stageColor = (k) => STAGES.find((s) => s[0] === k)?.[2] || '#94a3b8';
+export const stageVar = (k) => `var(--status-${k})`;
 
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -34,40 +36,6 @@ export const toRows = (obj) =>
     .map(([key, v]) => ({ key, name: pretty(key), value: num(v) }))
     .sort((a, b) => b.value - a.value);
 
-/* ---------------- theme ---------------- */
-/* Follows the app's own light/dark setting: data-theme / class on <html>, else the page background colour. */
-function readDark() {
-  const html = document.documentElement, body = document.body;
-  const attr = html.dataset.theme || html.getAttribute('data-bs-theme') || html.dataset.mode
-    || body.dataset.theme || body.dataset.mode;
-  if (attr) return /dark/i.test(attr);
-  const cls = `${html.className} ${body.className}`;
-  if (/\bdark\b/i.test(cls) || /theme-dark|dark-mode/i.test(cls)) return true;
-  if (/\blight\b/i.test(cls) || /theme-light|light-mode/i.test(cls)) return false;
-  for (const el of [body, html]) {
-    const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
-    if (m && (m[3] === undefined || Number(m[3]) > 0.05)) {
-      return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 < 0.5;
-    }
-  }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
-}
-export function useIsDark() {
-  const [dark, setDark] = useState(readDark);
-  useEffect(() => {
-    const update = () => setDark(readDark());
-    const mo = new MutationObserver(update);
-    const watch = { attributes: true, attributeFilter: ['class', 'data-theme', 'data-bs-theme', 'data-mode', 'style'] };
-    mo.observe(document.documentElement, watch);
-    mo.observe(document.body, watch);
-    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
-    mq?.addEventListener?.('change', update);
-    window.addEventListener('storage', update);
-    return () => { mo.disconnect(); mq?.removeEventListener?.('change', update); window.removeEventListener('storage', update); };
-  }, []);
-  return dark;
-}
-
 /* ---------------- icons ---------------- */
 const PATHS = {
   file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></>,
@@ -75,6 +43,9 @@ const PATHS = {
   shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" /></>,
   check: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></>,
   alert: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>,
+  download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>,
+  chevron: <polyline points="6 9 12 15 18 9" />,
+  reset: <><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></>,
 };
 export const Icon = ({ name, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -82,26 +53,40 @@ export const Icon = ({ name, size = 18 }) => (
 );
 
 /* ---------------- small pieces ---------------- */
-export const Chip = ({ pct }) => {
-  if (pct == null) return <span className="ax-muted ax-small">no comparison</span>;
-  const up = pct >= 0;
-  return <span className={`ax-chip ${up ? 'up' : 'down'}`}>{up ? '+' : ''}{pct}% {up ? '\u2197' : '\u2198'}</span>;
-};
+/* `badUp`: a rise is bad news (pending, fatalities), so it shows red instead of green. */
+export function Delta({ pct, badUp = false, compareYear }) {
+  if (pct == null || Number.isNaN(Number(pct))) {
+    return <span className="an-muted an-small">No {compareYear} data to compare</span>;
+  }
+  const v = Number(pct);
+  if (v === 0) return <span className="an-delta is-flat">No change<span className="an-delta-vs">vs {compareYear}</span></span>;
+  const up = v > 0;
+  const good = badUp ? !up : up;
+  return (
+    <span className={`an-delta ${good ? 'is-good' : 'is-bad'}`}>
+      <svg viewBox="0 0 10 10" width="9" height="9" fill="currentColor" aria-hidden="true">
+        <path d={up ? 'M5 1.6 9.2 8.2H0.8z' : 'M5 8.4 0.8 1.8h8.4z'} />
+      </svg>
+      {Math.abs(v).toFixed(1)}%
+      <span className="an-delta-vs">vs {compareYear}</span>
+    </span>
+  );
+}
 
-export function ProgressList({ rows, color = RED }) {
+export function ProgressList({ rows, color }) {
   const total = rows.reduce((s, r) => s + r.value, 0) || 1;
   return (
-    <ul className="ax-plist">
+    <ul className="an-plist">
       {rows.map((r) => {
         const p = Math.round((r.value / total) * 100);
         return (
           <li key={r.key}>
-            <div className="ax-plist-top">
+            <div className="an-plist-top">
               <b>{r.name}</b>
-              <span className="ax-muted">{r.value} {r.value === 1 ? 'Report' : 'Reports'}</span>
-              <span className="ax-plist-pct">{p}%</span>
+              <span className="an-muted">{r.value} {r.value === 1 ? 'report' : 'reports'}</span>
+              <span className="an-plist-pct">{p}%</span>
             </div>
-            <div className="ax-bar"><i style={{ width: `${p}%`, background: r.color || color }} /></div>
+            <div className="an-bar"><i style={{ width: `${p}%`, background: r.color || color || 'hsl(var(--accent))' }} /></div>
           </li>
         );
       })}
@@ -110,103 +95,173 @@ export function ProgressList({ rows, color = RED }) {
 }
 
 export function RankList({ rows }) {
+  const max = Math.max(1, ...rows.map((r) => r.value));
   return (
-    <ul className="ax-rank">
+    <ul className="an-rank">
       {rows.map((r) => (
         <li key={r.key}>
-          <span className="ax-badge">{r.name.slice(0, 1)}</span>
-          <b>{r.name}</b>
-          <span className="ax-rank-n"><b>{r.value}</b><small>{r.value === 1 ? 'Report' : 'Reports'}</small></span>
+          <span className="an-badge">{r.name.slice(0, 1)}</span>
+          <div className="an-rank-main">
+            <b>{r.name}</b>
+            <div className="an-bar"><i style={{ width: `${(r.value / max) * 100}%` }} /></div>
+          </div>
+          <span className="an-rank-n"><b>{r.value}</b><small>{r.value === 1 ? 'report' : 'reports'}</small></span>
         </li>
       ))}
     </ul>
   );
 }
 
-/* ---------------- charts ---------------- */
-const tipFor = (dark) => ({
-  contentStyle: dark
-    ? { background: '#1b1b1d', border: '1px solid #2a2a2d', borderRadius: 10, fontSize: 12 }
-    : { background: '#fff', border: '1px solid #ececee', borderRadius: 10, fontSize: 12, boxShadow: '0 6px 18px rgba(0,0,0,.08)' },
-  labelStyle: { color: dark ? '#9a9aa2' : '#6b6b73' },
-  itemStyle: { color: dark ? '#f2f2f3' : '#1b1b1f' },
-  cursor: { fill: 'rgba(229,56,59,.08)' },
-});
+export const Legend = ({ items }) => (
+  <ul className="an-key">
+    {items.map((i) => <li key={i.name}><i style={{ background: i.color }} />{i.name}</li>)}
+  </ul>
+);
 
-/* Faded bars + smooth trend line; the busiest month is picked out in dark, like the reference. */
-export function ComboChart({ rows, dark }) {
-  const peak = rows.reduce((best, r, i) => (r.Reports > rows[best].Reports ? i : best), 0);
-  const axis = { stroke: dark ? '#8f8f98' : '#9a9aa2', fontSize: 11, tickLine: false, axisLine: false };
-  const bar = dark ? '#3b2427' : '#fbd9da';
-  const hi = dark ? '#f4f4f5' : '#1f2023';
+/* ---------------- charts ---------------- */
+const tip = {
+  contentStyle: {
+    background: 'hsl(var(--surface-2))', border: '1px solid hsl(var(--line) / 0.2)', borderRadius: 10,
+    fontSize: 12, boxShadow: '0 10px 28px hsl(var(--shadow-color) / var(--shadow-alpha))',
+  },
+  labelStyle: { color: 'hsl(var(--text-3))', marginBottom: 2 },
+  itemStyle: { color: 'hsl(var(--text-1))' },
+};
+const axisProps = (c) => ({ stroke: c.muted, fontSize: 11, tickLine: false, axisLine: false });
+
+/* Two bars per month: the selected year against the comparison year. */
+export function GroupedBars({ rows, currentName, previousName }) {
+  const c = useThemeColors();
   return (
-    <ResponsiveContainer width="100%" height={230}>
-      <ComposedChart data={rows} margin={{ left: -22, right: 4, top: 8 }}>
-        <CartesianGrid vertical={false} stroke={dark ? '#2a2a2d' : '#efeff1'} />
-        <XAxis dataKey="month" {...axis} />
-        <YAxis allowDecimals={false} {...axis} />
-        <Tooltip {...tipFor(dark)} />
-        <Bar dataKey="Reports" radius={[6, 6, 0, 0]} barSize={22} isAnimationActive={false}>
-          {rows.map((r, i) => <Cell key={r.month} fill={i === peak && r.Reports ? hi : bar} />)}
-        </Bar>
-        <Line type="monotone" dataKey="Trend" stroke={RED} strokeWidth={2.5} dot={false} isAnimationActive={false} />
-      </ComposedChart>
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={rows} margin={{ left: -18, right: 4, top: 8 }} barGap={3} barCategoryGap="24%">
+        <CartesianGrid vertical={false} strokeDasharray="3 5" stroke={c.grid} />
+        <XAxis dataKey="month" {...axisProps(c)} />
+        <YAxis allowDecimals={false} {...axisProps(c)} />
+        <Tooltip {...tip} cursor={{ fill: c.grid }} />
+        <Bar dataKey="current" name={currentName} fill={c.accent} radius={[6, 6, 0, 0]} maxBarSize={14} isAnimationActive={false} />
+        <Bar dataKey="previous" name={previousName} fill={c.status.in_progress} radius={[6, 6, 0, 0]} maxBarSize={14} isAnimationActive={false} />
+      </BarChart>
     </ResponsiveContainer>
   );
 }
 
-const heatScale = (dark) => (dark
-  ? { empty: '#252528', lv: ['#4a2327', '#8a2f35', '#e5383b'], peak: '#f4f4f5' }
-  : { empty: '#f6f6f7', lv: ['#fde3e3', '#f9b4b6', '#ee6a70'], peak: '#1f2023' });
-export function Heat({ grid, dark }) {
-  const sc = heatScale(dark);
-  const max = Math.max(1, ...grid.flat());
-  const shade = (v) => (!v ? sc.empty : v === max && max > 1 ? sc.peak : sc.lv[Math.min(2, Math.floor((v / max) * 3))]);
+/* Smooth gradient line with the best month picked out by a dot and a drop line. */
+export function SmoothLine({ rows, dataKey, name, unit = '' }) {
+  const c = useThemeColors();
+  const best = rows.reduce((b, r, i) => (r[dataKey] > rows[b][dataKey] ? i : b), 0);
+  const peak = rows[best];
   return (
-    <div className="ax-heat">
-      {DAYS.map((d, di) => (
-        <div key={d} className="ax-heat-row">
-          <span>{d}</span>
-          {grid[di].map((v, si) => (
-            <i key={si} style={{ background: shade(v) }} title={`${d} ${SLOT_LABELS[si]}: ${v} report${v === 1 ? '' : 's'}`} />
-          ))}
-        </div>
-      ))}
-      <div className="ax-heat-row ax-heat-x">
-        <span />
-        {SLOT_LABELS.map((l) => <span key={l}>{l}</span>)}
-      </div>
-    </div>
+    <ResponsiveContainer width="100%" height={230}>
+      <LineChart data={rows} margin={{ left: -18, right: 8, top: 22 }}>
+        <defs>
+          <linearGradient id="an-line-grad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={c.accent} />
+            <stop offset="100%" stopColor={c.violet} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} strokeDasharray="3 5" stroke={c.grid} />
+        <XAxis dataKey="month" {...axisProps(c)} />
+        <YAxis allowDecimals={false} domain={[0, 100]} unit={unit} {...axisProps(c)} />
+        <Tooltip {...tip} formatter={(v) => [`${v}${unit}`, name]} cursor={{ stroke: c.grid }} />
+        <Line type="monotone" dataKey={dataKey} name={name} stroke="url(#an-line-grad)" strokeWidth={3}
+          dot={false} activeDot={{ r: 5 }} isAnimationActive={false} />
+        {peak?.[dataKey] > 0 && (
+          <ReferenceDot x={peak.month} y={peak[dataKey]} r={5} fill={c.violet} stroke={c.accentText} strokeWidth={2}
+            label={{ value: `${peak[dataKey]}${unit}`, position: 'top', fill: c.violet, fontSize: 11, fontWeight: 600 }} />
+        )}
+      </LineChart>
+    </ResponsiveContainer>
   );
 }
-export const HeatLegend = ({ dark }) => {
-  const sc = heatScale(dark);
-  return <span className="ax-legend">Less {[...sc.lv, sc.peak].map((c) => <i key={c} style={{ background: c }} />)} More</span>;
-};
 
-export function Donut({ rows, colors, dark }) {
+/* Filled area for a running total; the comparison year is a dashed outline behind it. */
+export function AreaTrend({ rows, currentName, previousName }) {
+  const c = useThemeColors();
+  return (
+    <ResponsiveContainer width="100%" height={230}>
+      <AreaChart data={rows} margin={{ left: -18, right: 8, top: 8 }}>
+        <defs>
+          <linearGradient id="an-area-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={c.accent} stopOpacity={0.4} />
+            <stop offset="100%" stopColor={c.accent} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} strokeDasharray="3 5" stroke={c.grid} />
+        <XAxis dataKey="month" {...axisProps(c)} />
+        <YAxis allowDecimals={false} {...axisProps(c)} />
+        <Tooltip {...tip} cursor={{ stroke: c.grid }} />
+        <Area type="monotone" dataKey="previous" name={previousName} stroke={c.muted} strokeDasharray="4 4"
+          strokeWidth={1.5} fill="none" dot={false} isAnimationActive={false} />
+        <Area type="monotone" dataKey="current" name={currentName} stroke={c.accent} strokeWidth={2.5}
+          fill="url(#an-area-grad)" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+/* Multi-colour ring with the total in the hole and a two-column legend underneath. */
+export function Ring({ rows, colorFor, label }) {
+  const c = useThemeColors();
   const total = rows.reduce((s, r) => s + r.value, 0);
   return (
-    <div className="ax-donut">
-      <div className="ax-donut-chart">
-        <PieChart width={150} height={150}>
-          <Pie data={rows} dataKey="value" nameKey="name" innerRadius={50} outerRadius={70}
-            paddingAngle={rows.length > 1 ? 3 : 0} cornerRadius={5} stroke="none" isAnimationActive={false}>
-            {rows.map((r) => <Cell key={r.key} fill={colors[r.key] || '#9ca3af'} />)}
+    <div className="an-ring">
+      <div className="an-ring-chart">
+        <PieChart width={190} height={190}>
+          <Pie data={rows} dataKey="value" nameKey="name" innerRadius={62} outerRadius={86}
+            paddingAngle={rows.length > 1 ? 3 : 0} cornerRadius={6} stroke="none" startAngle={90} endAngle={-270}
+            isAnimationActive={false}>
+            {rows.map((r) => <Cell key={r.key} fill={colorFor(r.key, c)} />)}
           </Pie>
-          <Tooltip {...tipFor(dark)} />
+          <Tooltip {...tip} />
         </PieChart>
-        <b>{total}</b>
+        <div className="an-ring-c"><b>{total}</b><small>{label}</small></div>
       </div>
-      <ul>
+      <ul className="an-ring-legend">
         {rows.map((r) => (
           <li key={r.key}>
-            <i style={{ background: colors[r.key] || '#9ca3af' }} />
-            <span>{r.name}</span><b>{r.value}</b>
-            <span className="ax-muted">{total ? `${Math.round((r.value / total) * 100)}%` : ''}</span>
+            <i style={{ background: colorFor(r.key, c) }} />
+            <span>{r.name}</span>
+            <b>{r.value}</b>
           </li>
         ))}
       </ul>
     </div>
   );
 }
+
+/* Day x 2-hour grid. Busier cells are darker; the busiest is called out in amber. */
+const heatShade = (v, max) => {
+  if (!v) return 'hsl(var(--line) / 0.07)';
+  if (v === max && max > 1) return 'hsl(var(--level-heavy))';
+  const a = [0.28, 0.55, 0.9][Math.min(2, Math.floor((v / max) * 3))];
+  return `hsl(var(--accent) / ${a})`;
+};
+export function Heat({ grid }) {
+  const max = Math.max(1, ...grid.flat());
+  return (
+    <div className="an-heat">
+      {DAYS.map((d, di) => (
+        <div key={d} className="an-heat-row">
+          <span>{d}</span>
+          {grid[di].map((v, si) => (
+            <i key={si} style={{ background: heatShade(v, max) }}
+              title={`${d} ${SLOT_LABELS[si]}: ${v} report${v === 1 ? '' : 's'}`} />
+          ))}
+        </div>
+      ))}
+      <div className="an-heat-row an-heat-x">
+        <span />
+        {SLOT_LABELS.map((l) => <span key={l}>{l}</span>)}
+      </div>
+    </div>
+  );
+}
+export const HeatLegend = () => (
+  <span className="an-heat-legend">
+    Less
+    {[0.28, 0.55, 0.9].map((a) => <i key={a} style={{ background: `hsl(var(--accent) / ${a})` }} />)}
+    <i style={{ background: 'hsl(var(--level-heavy))' }} />
+    More
+  </span>
+);

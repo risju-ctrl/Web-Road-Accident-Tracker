@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { to: '/map', label: 'Map', roles: ['reporter', 'admin', 'traffic_officer'] },
   { to: '/notifications', label: 'Notifications', roles: ['reporter', 'admin', 'traffic_officer'] },
   { to: '/officer', label: 'Officer', roles: ['traffic_officer', 'admin'] },
-  { to: '/admin', label: 'Admin', roles: ['admin'], end: true },
+  { to: '/admin', label: 'Analytics', roles: ['admin'], end: true },
   { to: '/admin/users', label: 'Users', roles: ['admin'] },
   { to: '/admin/audit-logs', label: 'Audit logs', roles: ['admin'] }
 ];

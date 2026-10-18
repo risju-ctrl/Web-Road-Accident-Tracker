@@ -74,3 +74,15 @@
   .rd-card { padding: 18px; }
   .rd-hd h1 { font-size: 1.5rem; }
 }
+
+/* Assign-officer dialog */
+.rd-officers { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+.rd-officer { display: flex; align-items: center; gap: 12px; margin: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid hsl(var(--line) / .1); background: hsl(var(--surface-2)); cursor: pointer; text-transform: none; letter-spacing: normal; font-size: 0.875rem; color: hsl(var(--text-1)); }
+.rd-officer:hover { border-color: hsl(var(--line) / .24); }
+.rd-officer.is-on { border-color: hsl(var(--accent)); background: hsl(var(--accent) / .12); }
+.rd-officer input { width: auto; flex: none; }
+.rd-officer span { display: flex; flex-direction: column; min-width: 0; }
+.rd-officer b { font-weight: 500; }
+.rd-officer small { font-size: 0.75rem; color: hsl(var(--text-3)); overflow: hidden; text-overflow: ellipsis; }
+.rd-assign-err { margin: 0 0 12px; padding: 8px 12px; border-radius: 10px; background: hsl(var(--status-rejected) / .14); color: hsl(var(--text-1)); font-size: 0.8125rem; }
+.rd-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
