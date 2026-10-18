@@ -15,11 +15,11 @@ export const Notification = {
   async listByUser(userId, { unreadOnly = false, page = 1, limit = 20 } = {}) {
     let query = 'SELECT n.*, r.report_reference, r.title as report_title FROM notifications n LEFT JOIN reports r ON n.report_id = r.id WHERE n.user_id = ?';
     const params = [userId];
-    if (unreadOnly) { query += ' AND n.is_read = 0'; }
+    if (unreadOnly) { query += ' AND n.is_read = false'; }
     query += ' ORDER BY n.created_at DESC LIMIT ? OFFSET ?';
     params.push(Number(limit), (Number(page) - 1) * Number(limit));
     const [rows] = await pool.query(query, params);
-    const [[{ total }]] = await pool.query('SELECT COUNT(*) as total FROM notifications WHERE user_id = ?' + (unreadOnly ? ' AND is_read = 0' : ''), [userId]);
+    const [[{ total }]] = await pool.query('SELECT COUNT(*)::int as total FROM notifications WHERE user_id = ?' + (unreadOnly ? ' AND is_read = false' : ''), [userId]);
     return { rows, total, page: Number(page), limit: Number(limit) };
   },
   async markRead(id, userId) {
@@ -27,15 +27,15 @@ export const Notification = {
     // and marking an already-read notification stays idempotent.
     const [rows] = await pool.query('SELECT id FROM notifications WHERE id = ? AND user_id = ?', [id, userId]);
     if (rows.length === 0) return null;
-    await pool.query('UPDATE notifications SET is_read = 1, read_at = NOW() WHERE id = ? AND user_id = ?', [id, userId]);
+    await pool.query('UPDATE notifications SET is_read = true, read_at = NOW() WHERE id = ? AND user_id = ?', [id, userId]);
     return this.findById(id);
   },
   async markAllRead(userId) {
-    await pool.query('UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND is_read = 0', [userId]);
+    await pool.query('UPDATE notifications SET is_read = true, read_at = NOW() WHERE user_id = ? AND is_read = false', [userId]);
     return { success: true };
   },
   async unreadCount(userId) {
-    const [[{ count }]] = await pool.query('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0', [userId]);
+    const [[{ count }]] = await pool.query('SELECT COUNT(*)::int as count FROM notifications WHERE user_id = ? AND is_read = false', [userId]);
     return count;
   }
 };

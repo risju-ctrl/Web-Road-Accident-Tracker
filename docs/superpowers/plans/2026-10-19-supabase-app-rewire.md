@@ -333,7 +333,7 @@ Rationale for the shape: the API keeps serving `true|false`, which the client co
 - [ ] **Step 2: Aggregates must stay numbers**
 
 - `models/AuditLog.js:13` → `SELECT COUNT(*)::int as total FROM audit_logs`
-- `routes/summaries.js:191` → `COUNT(*)::int as count`; lines 192-199 → wrap each pivot in a cast, e.g. `SUM(CASE WHEN r.status = 'submitted' THEN 1 ELSE 0 END)::int as submitted` (all eight columns).
+- `routes/summaries.js:191` → `COUNT(*)::int as count`. Lines 192-199 stay **uncast**: MySQL already returned `SUM()` as a DECIMAL *string* (the recorded baseline has `"submitted":"1"`), so leaving Postgres's `bigint` as a string keeps the API byte-identical. `SUM` must *not* be cast — doing so silently changes the response type that `client/src/components/Charts.jsx:119` feeds straight to Recharts.
 
 - [ ] **Step 3: MySQL-only SQL expressions**
 
@@ -343,7 +343,13 @@ Rationale for the shape: the API keeps serving `true|false`, which the client co
   - `weekly` → `to_char(r.created_at, 'IYYY-IW')` (ISO week; MySQL `YEARWEEK` used a Sunday-start week, so week labels shift — flag this to the owner, it is a labelling change, not a data change)
   - `annual` → `EXTRACT(YEAR FROM r.created_at)::int`
   - default → `to_char(r.created_at, 'YYYY-MM')`
-- `routes/summaries.js:128` → `SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC` (`EXTRACT` yields `numeric`, which node-postgres returns as a string, and line 131 hands `r.y` straight to the client's year picker).
+- `routes/summaries.js:128` → `SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC`
+- `routes/summaries.js:248-249` → the two `!= "rejected"` / `= "rejected"` filters become single-quoted. **This one is a hard error, not a difference:** Postgres reads `"rejected"` as an identifier, so the export fails with `column "rejected" does not exist`. `reports.status` is `text` in Supabase, so nothing else about it needs to change.
+
+**Step 3b: two differences the smokesheet cannot see**
+
+- **`LIKE` is case-sensitive in Postgres and was case-insensitive in MySQL**, so every search driven by user input becomes `ILIKE`: `models/Report.js:174,176` (location filter, and the `q` search over reference/title/location) and `routes/summaries.js:93,247` (location filters). `utils/helpers.js:8` keeps `LIKE` — it matches a generated `RA-<year>-%` prefix whose case is fixed. Without this, searching `quezon` stops finding `Quezon City`, and no recorded baseline entry covers a lower-case search.
+- Session time zone: `config/db.js` sets `set time zone 'Asia/Manila'` on every connection, because MySQL ran with `timezone=SYSTEM` (Asia/Manila) and the summaries group by day/week/month in SQL. Left at UTC, a report filed at 00:30 Manila time counts as the previous day (and the previous month on the 1st). No current row crosses a boundary, so the comparison cannot catch this — it must be set deliberately. (`EXTRACT` yields `numeric`, which node-postgres returns as a string, and line 131 hands `r.y` straight to the client's year picker).
 - `routes/summaries.js:191-199` — no change beyond the `::int` casts from Step 2; `SUM(CASE WHEN …)` is portable.
 - `database/seed.js:24-26` →
 

@@ -5,7 +5,7 @@ export async function generateReportReference() {
   const prefix = `RA-${year}-`;
   // Highest existing number for the year + 1, so deleting a row never causes a reused reference.
   const [rows] = await pool.query(
-    'SELECT MAX(CAST(SUBSTRING(report_reference, ?) AS UNSIGNED)) AS maxn FROM reports WHERE report_reference LIKE ?',
+    'SELECT MAX(CAST(SUBSTRING(report_reference FROM ?) AS integer)) AS maxn FROM reports WHERE report_reference LIKE ?',
     [prefix.length + 1, `${prefix}%`]
   );
   const next = (Number(rows[0].maxn) || 0) + 1;

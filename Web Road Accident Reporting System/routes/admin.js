@@ -23,7 +23,7 @@ router.get('/dashboard', async (req, res, next) => {
 router.get('/users', async (req, res, next) => {
   try {
     const role = req.query.role || null;
-    const isActive = req.query.is_active !== undefined ? Number(req.query.is_active) : undefined;
+    const isActive = req.query.is_active === undefined ? undefined : Number(req.query.is_active) === 1;
     const users = await User.list({ role, is_active: isActive });
     res.json(users);
   } catch (err) { next(err); }
@@ -74,7 +74,7 @@ router.patch('/users/:id', async (req, res, next) => {
     const update = {};
     if (name !== undefined) update.name = String(name).trim();
     if (phone !== undefined) update.phone = phone;
-    if (is_active !== undefined) update.is_active = Number(is_active) ? 1 : 0;
+    if (is_active !== undefined) update.is_active = Number(is_active) === 1;
     if (email !== undefined) {
       if (!validator.isEmail(String(email).trim())) {
         return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'A valid email is required' } });
@@ -174,7 +174,7 @@ router.patch('/reports/:id/verify', async (req, res, next) => {
       const { assignedTo } = req.body;
       if (!assignedTo) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'assignedTo required' } });
       const officer = await User.findById(Number(assignedTo));
-      if (!officer || officer.role !== 'traffic_officer' || officer.is_active !== 1) {
+      if (!officer || officer.role !== 'traffic_officer' || !officer.is_active) {
         return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'Choose an active traffic officer' } });
       }
       updated = await Report.assign(report.id, officer.id, req.user.id);

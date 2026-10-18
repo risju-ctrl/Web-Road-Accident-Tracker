@@ -171,9 +171,9 @@ function buildReportQuery(user, filters = {}) {
   if (date_from && /^\d{4}-\d{2}-\d{2}$/.test(date_from)) { conditions.push('r.accident_date >= ?'); params.push(date_from); }
   if (date_to && /^\d{4}-\d{2}-\d{2}$/.test(date_to)) { conditions.push('r.accident_date <= ?'); params.push(date_to); }
   if (category_id && Number(category_id)) { conditions.push('r.accident_category_id = ?'); params.push(Number(category_id)); }
-  if (location) { conditions.push('r.location LIKE ?'); params.push(`%${String(location).slice(0, 100)}%`); }
+  if (location) { conditions.push('r.location ILIKE ?'); params.push(`%${String(location).slice(0, 100)}%`); }
   if (q) {
-    conditions.push('(r.report_reference LIKE ? OR r.title LIKE ? OR r.location LIKE ?)');
+    conditions.push('(r.report_reference ILIKE ? OR r.title ILIKE ? OR r.location ILIKE ?)');
     const like = `%${String(q).slice(0, 100)}%`;
     params.push(like, like, like);
   }

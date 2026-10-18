@@ -37,7 +37,7 @@ router.post('/login', async (req, res, next) => {
     if (!user || !await User.verifyPassword(user, password)) {
       return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } });
     }
-    if (user.is_active !== 1) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Account is inactive' } });
+    if (!user.is_active) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Account is inactive' } });
     // The random id makes every issued token unique, so logs are not counted out by an earlier logout.
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRE || '8h',
