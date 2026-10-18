@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import api from '../services/api';
+import AuditDetails from '../components/AuditDetails';
 
 export default function AdminAuditLogs() {
   const [data, setData] = useState({ rows: [], total: 0, page: 1, limit: 50 });
@@ -50,7 +51,7 @@ export default function AdminAuditLogs() {
                     <td>{log.entity_type}</td>
                     <td>{log.entity_id || '-'}</td>
                     <td>{log.ip_address || '-'}</td>
-                    <td><pre style={{ fontSize: '0.75rem', maxHeight: '100px', overflow: 'auto' }}>{log.details ? JSON.stringify(log.details, null, 2) : ''}</pre></td>
+                    <td><AuditDetails details={log.details} /></td>
                   </tr>
                 ))}
               </tbody>

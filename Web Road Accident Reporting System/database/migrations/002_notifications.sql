@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  CONSTRAINT fk_notif_report FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE SET NULL
+  CONSTRAINT fk_notif_report FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE SET NULL,
+  -- Indexes live inside CREATE TABLE because "CREATE INDEX IF NOT EXISTS" is MariaDB-only.
+  INDEX idx_notif_user_read (user_id, is_read),
+  INDEX idx_notif_created (created_at)
 );
-
-CREATE INDEX IF NOT EXISTS idx_notif_user_read ON notifications (user_id, is_read);
-CREATE INDEX IF NOT EXISTS idx_notif_created ON notifications (created_at);

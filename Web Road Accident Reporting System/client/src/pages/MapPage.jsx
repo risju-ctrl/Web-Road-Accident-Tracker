@@ -975,7 +975,7 @@ export default function MapPage() {
         <div ref={mapAreaRef} className={`ops-map mp-map ${panel ? 'has-panel' : ''}`}>
           <nav className="mp-rail" aria-label="Map tools">
             <span className="mp-brand" aria-hidden="true">
-              <Icon name="disaster" size={20} />
+              <img src="/agap-mark.png" alt="" />
             </span>
 
             <div className="mp-rail-group">

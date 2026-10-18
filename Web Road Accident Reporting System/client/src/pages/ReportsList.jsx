@@ -46,12 +46,22 @@ export default function ReportsList() {
   const [selectedId, setSelectedId] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const status = searchParams.get('status') || '';
+  const dateFrom = searchParams.get('from') || '';
+  const dateTo = searchParams.get('to') || '';
+  const categoryId = searchParams.get('type') || '';
+  const [categories, setCategories] = useState([]);
+  useEffect(() => { api.get('/accident-categories').then((r) => setCategories(r.data || [])).catch(() => {}); }, []);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError('');
-    api.get('/reports', { params: status ? { status } : {} })
+    const params = {};
+    if (status) params.status = status;
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    if (categoryId) params.category_id = categoryId;
+    api.get('/reports', { params })
       .then((res) => { if (alive) setReports(Array.isArray(res.data) ? res.data : []); })
       .catch((err) => {
         console.error(err);
@@ -59,7 +69,7 @@ export default function ReportsList() {
       })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [status]);
+  }, [status, dateFrom, dateTo, categoryId]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -87,16 +97,26 @@ export default function ReportsList() {
   }, [selectedId0]);
   const images = useEvidenceImages(selectedId0, evidenceById[selectedId0]);
 
-  const setStatus = (value) => setSearchParams(value ? { status: value } : {});
+  const setParam = (key, value) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value); else next.delete(key);
+    setSearchParams(next);
+  };
+  const setStatus = (value) => setParam('status', value);
 
-  // CSV is fetched with the auth header and saved as a blob so the token never appears in a URL.
-  const downloadCsv = async () => {
+  // Exports are fetched with the auth header and saved as a blob so the token never appears in a URL.
+  const downloadExport = async (format) => {
     try {
-      const res = await api.get('/summaries/reports/export?format=csv', { responseType: 'blob' });
+      const params = { format };
+      if (status) params.status = status;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      if (categoryId) params.category_id = categoryId;
+      const res = await api.get('/summaries/reports/export', { params, responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `accident-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `accident-reports-${new Date().toISOString().slice(0, 10)}.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -119,7 +139,8 @@ export default function ReportsList() {
             <p>{loading ? 'Loading…' : `${visible.length} ${visible.length === 1 ? 'report' : 'reports'}${status ? ` · ${statusLabel(status)}` : ''}`}</p>
           </div>
           <div className="rs-actions">
-            {user.role === 'admin' && <button type="button" className="rs-btn" onClick={downloadCsv}>Export CSV</button>}
+            {user.role === 'admin' && <button type="button" className="rs-btn" onClick={() => downloadExport('csv')}>Export CSV</button>}
+            {user.role === 'admin' && <button type="button" className="rs-btn" onClick={() => downloadExport('pdf')}>Export PDF</button>}
             {user.role === 'reporter' && <Link to="/reports/new" className="rs-btn rs-btn--primary">New report</Link>}
           </div>
         </div>
@@ -128,6 +149,16 @@ export default function ReportsList() {
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search reference, place, type" aria-label="Search reports" />
         </label>
+
+        <div className="rs-filters" style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', margin: '.5rem 0' }}>
+          <label style={{ fontSize: '.8rem' }}>From <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setParam('from', e.target.value)} aria-label="Accident date from" /></label>
+          <label style={{ fontSize: '.8rem' }}>To <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setParam('to', e.target.value)} aria-label="Accident date to" /></label>
+          <select value={categoryId} onChange={(e) => setParam('type', e.target.value)} aria-label="Accident type">
+            <option value="">All types</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {(dateFrom || dateTo || categoryId) && <button type="button" className="rs-btn" onClick={() => { const n = new URLSearchParams(searchParams); ['from','to','type'].forEach((k) => n.delete(k)); setSearchParams(n); }}>Clear</button>}
+        </div>
 
         <div className="rs-chips" role="tablist" aria-label="Filter by status">
           {STATUS_CHIPS.filter(([v]) => !v || STATUS_OPTIONS.includes(v)).map(([value, text]) => (

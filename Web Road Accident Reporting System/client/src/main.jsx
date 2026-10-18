@@ -6,10 +6,8 @@ import { AuthProvider } from './context/AuthContext';
 import 'leaflet/dist/leaflet.css';
 import './index.css';
 import './window.css';
+import './agap.css';
 
-// The site is always dark; this also drops any light theme saved by older builds.
-document.documentElement.dataset.theme = 'dark';
-try { localStorage.removeItem('theme'); } catch (e) { /* storage unavailable */ }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

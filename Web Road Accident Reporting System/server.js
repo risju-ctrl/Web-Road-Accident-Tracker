@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 import authRoutes from './routes/auth.js';
 import reportRoutes from './routes/reports.js';
@@ -14,9 +16,19 @@ import { errorHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
 
+// Refuse to start with a missing or placeholder signing secret.
+const secret = process.env.JWT_SECRET || '';
+if (secret.length < 32 || /change_this|secret_key|changeme/i.test(secret)) {
+  console.error('JWT_SECRET is missing, too short (min 32 chars) or still a placeholder. Set a strong value in .env.');
+  process.exit(1);
+}
+
 const app = express();
 
-app.use(cors());
+app.use(helmet());
+// Only the listed origins may call the API from a browser (comma separated in CORS_ORIGIN).
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((o) => o.trim());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
@@ -25,6 +37,16 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Slow down password guessing and mass sign-ups.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many attempts. Try again in a few minutes.' } }
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 app.use('/api/auth', authRoutes);
 // summaryRoutes MUST be before /api/reports to avoid :id catching /summaries
 app.use('/api/summaries', summaryRoutes);

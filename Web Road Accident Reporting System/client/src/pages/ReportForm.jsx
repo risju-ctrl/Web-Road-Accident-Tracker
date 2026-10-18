@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -20,6 +20,50 @@ export default function ReportForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [photos, setPhotos] = useState([]); // [{ file, url }]
+  const [locating, setLocating] = useState(false);
+  const photoUrls = useRef([]);
+  photoUrls.current = photos.map((p) => p.url);
+  useEffect(() => () => photoUrls.current.forEach((u) => URL.revokeObjectURL(u)), []);
+
+  const MAX_PHOTOS = 5;
+  const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  const addPhotos = (e) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = '';
+    const problems = [];
+    const accepted = [];
+    for (const f of picked) {
+      if (!ALLOWED.includes(f.type)) problems.push(`${f.name}: only JPG, PNG, WebP or PDF`);
+      else if (f.size > 10 * 1024 * 1024) problems.push(`${f.name}: larger than 10 MB`);
+      else accepted.push({ file: f, url: f.type.startsWith('image/') ? URL.createObjectURL(f) : '' });
+    }
+    const room = MAX_PHOTOS - photos.length;
+    if (accepted.length > room) {
+      accepted.slice(room).forEach((a) => a.url && URL.revokeObjectURL(a.url));
+      problems.push(`You can attach up to ${MAX_PHOTOS} files`);
+    }
+    setPhotos([...photos, ...accepted.slice(0, room)]);
+    setError(problems.join('. '));
+  };
+  const removePhoto = (i) => {
+    if (photos[i].url) URL.revokeObjectURL(photos[i].url);
+    setPhotos(photos.filter((_, idx) => idx !== i));
+  };
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) { setError('This browser cannot detect your location. Enter it manually.'); return; }
+    setLocating(true);
+    setError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((f) => ({ ...f, latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) }));
+        setLocating(false);
+      },
+      () => { setLocating(false); setError('Could not get your location. Allow location access or enter the coordinates manually.'); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   useEffect(() => {
     api.get('/accident-categories').then(res => setCategories(res.data)).catch(() => {});
@@ -58,7 +102,19 @@ export default function ReportForm() {
       if (isEdit) {
         await api.patch(`/reports/${id}`, data);
       } else {
-        await api.post('/reports', data);
+        const created = await api.post('/reports', data);
+        // The report exists now; attach the photos one by one and report any that fail.
+        const failed = [];
+        for (const p of photos) {
+          const fd = new FormData();
+          fd.append('file', p.file);
+          try { await api.post(`/reports/${created.data.id}/evidence`, fd); } catch { failed.push(p.file.name); }
+        }
+        if (failed.length) {
+          alert(`Report submitted, but these files could not be uploaded: ${failed.join(', ')}. You can add them from the report page.`);
+          navigate(`/reports/${created.data.id}`);
+          return;
+        }
       }
       navigate('/reports');
     } catch (err) {
@@ -108,6 +164,10 @@ export default function ReportForm() {
           <div className="form-group">
             <label>Location *</label>
             <input type="text" value={form.location} onChange={e => setForm({...form, location: e.target.value})} required placeholder="Street, City, Landmark" />
+          </div>
+          <div className="form-group">
+            <button type="button" className="btn btn-secondary" onClick={useMyLocation} disabled={locating}>{locating ? 'Locating...' : 'Use my current location'}</button>
+            <small style={{ marginLeft: '.75rem' }}>Fills latitude and longitude. You can also type them in.</small>
           </div>
           <div className="form-row">
             <div className="form-group">
@@ -160,6 +220,23 @@ export default function ReportForm() {
               <input type="number" min="0" value={form.fatalities} onChange={e => setForm({...form, fatalities: e.target.value})} />
             </div>
           </div>
+          {!isEdit && (
+            <div className="form-group">
+              <label>Photos or documents (optional, up to {MAX_PHOTOS})</label>
+              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple onChange={addPhotos} disabled={photos.length >= MAX_PHOTOS} />
+              {photos.length > 0 && (
+                <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', marginTop: '.5rem' }}>
+                  {photos.map((p, i) => (
+                    <div key={p.url || p.file.name + i} style={{ width: 96, fontSize: '.75rem' }}>
+                      {p.url ? <img src={p.url} alt={p.file.name} style={{ width: 96, height: 72, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 96, height: 72, display: 'grid', placeItems: 'center', border: '1px solid #8886', borderRadius: 6 }}>PDF</div>}
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.file.name}>{p.file.name}</div>
+                      <button type="button" className="btn btn-secondary" onClick={() => removePhoto(i)}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '1rem' }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
             <button type="button" className="btn btn-secondary" onClick={() => navigate('/reports')}>Cancel</button>

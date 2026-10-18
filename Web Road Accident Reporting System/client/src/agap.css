@@ -1,0 +1,160 @@
+/* AGAP: brand and theme layer. Loaded after window.css, so at equal specificity
+   these rules win. Dark keeps the existing Roadwatch palette; the light theme is
+   re-derived from the logo's gold and cream on a warm paper surface. */
+
+/* ---------- light theme tokens ---------- */
+:root[data-theme='light'] {
+  --surface-0: 42 22% 94%;
+  --surface-1: 45 30% 98%;
+  --surface-2: 42 24% 94%;
+  --surface-3: 40 18% 88%;
+  --line: 30 12% 18%;
+  --line-alpha: 0.12;
+  --line-strong-alpha: 0.2;
+  --text-1: 30 14% 10%;
+  --text-2: 30 8% 27%;
+  --text-3: 30 6% 37%;
+
+  /* The logo's gold, darkened until white text on it passes AA. */
+  --accent: 38 62% 36%;
+  --accent-hover: 38 64% 30%;
+  --accent-ink: 45 40% 97%;
+  --accent-text: 38 70% 29%;
+
+  --status-submitted: 215 16% 38%;
+  --status-under_review: 32 95% 34%;
+  --status-needs_clarification: 21 90% 40%;
+  --status-verified: 175 84% 25%;
+  --status-assigned: 262 70% 48%;
+  --status-in_progress: 216 90% 40%;
+  --status-resolved: 161 94% 23%;
+  --status-rejected: 0 74% 42%;
+  --role-reporter: 215 16% 38%;
+
+  --shadow-color: 30 30% 20%;
+  --shadow-alpha: 0.14;
+
+  --rw-wallpaper: #b9b4a8;
+
+  color-scheme: light;
+}
+
+:root[data-theme='light'] .rw-desktop {
+  background:
+    radial-gradient(1100px 700px at 12% 6%, #d6d0c2 0%, transparent 62%),
+    radial-gradient(900px 620px at 94% 98%, #9d978b 0%, transparent 64%),
+    var(--rw-wallpaper);
+}
+
+:root[data-theme='light'] .rw-window {
+  box-shadow:
+    0 0 0 1px rgba(40, 30, 10, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.75),
+    0 40px 90px -24px rgba(40, 30, 10, 0.4),
+    0 12px 28px rgba(40, 30, 10, 0.14);
+}
+
+:root[data-theme='light'] .rw-menu { box-shadow: 0 18px 40px rgba(40, 30, 10, 0.2); }
+:root[data-theme='light'] .modal { box-shadow: 0 30px 70px rgba(40, 30, 10, 0.28); }
+:root[data-theme='light'] .rw-avatar { color: hsl(var(--accent-ink)); }
+:root[data-theme='light'] .rw-map-missing code { background: hsl(var(--line) / 0.08); }
+
+/* Two window.css rules hard-code white, which vanishes on the light surface. */
+.rw-toolbar .rw-nav a.active { color: hsl(var(--text-1)); }
+
+/* ---------- brand ---------- */
+.rw-toolbar .rw-brand {
+  color: hsl(var(--text-1));
+  gap: 10px;
+}
+.rw-brand .agap-mark {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 9px;
+  /* The artwork carries its own dark ground, so the ring keeps its edge visible on both themes. */
+  box-shadow: 0 0 0 1px hsl(var(--line) / 0.16);
+}
+.rw-brand .agap-name { display: flex; flex-direction: column; line-height: 1.05; }
+.rw-brand .agap-name strong {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
+.rw-brand .agap-name small {
+  margin-top: 2px;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: hsl(var(--text-3));
+}
+@media (max-width: 1180px) {
+  .rw-brand .agap-name small { display: none; }
+}
+
+/* Login and register banner. */
+.agap-lockup {
+  display: block;
+  width: min(300px, 100%);
+  height: auto;
+  margin: 0 auto 1.25rem;
+  border-radius: 14px;
+}
+
+/* Map rail badge. */
+.mp-brand { overflow: hidden; }
+.mp-brand img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---------- theme button ---------- */
+.rw-tools .theme-toggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid hsl(var(--line) / 0.1);
+  background: hsl(var(--surface-2));
+  color: hsl(var(--text-1));
+}
+.rw-tools .theme-toggle:hover { background: hsl(var(--surface-3)); }
+
+.theme-toggle { position: relative; cursor: pointer; }
+.theme-toggle:focus-visible {
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: 2px;
+}
+/* Both icons are always mounted; the one for the mode you would switch to shows. */
+.theme-toggle svg {
+  position: absolute;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease;
+}
+:root:not([data-theme='light']) .theme-toggle .ti-moon { opacity: 0; transform: rotate(-70deg) scale(0.5); }
+:root[data-theme='light'] .theme-toggle .ti-sun { opacity: 0; transform: rotate(70deg) scale(0.5); }
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle svg { transition: none; }
+}
+
+/* ---------- window chrome ---------- */
+/* The red/yellow/green dots were decoration only, so they are gone. */
+.rw-lights { display: none; }
+
+/* ---------- audit log details ---------- */
+.audit-details {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 460px;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+.audit-details > div { display: flex; gap: 10px; align-items: baseline; }
+.audit-details dt { flex: none; min-width: 72px; color: hsl(var(--text-3)); }
+.audit-details dd {
+  margin: 0;
+  color: hsl(var(--text-1));
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

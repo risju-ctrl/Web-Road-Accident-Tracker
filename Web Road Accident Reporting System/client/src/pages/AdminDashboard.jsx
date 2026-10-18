@@ -94,7 +94,7 @@ export default function AdminDashboard() {
 
         <header className="ad-hd">
           <div className="ad-brand">
-            <h1>Road Accident Reporting: Analytics</h1>
+            <h1>AGAP Analytics</h1>
             <p className="ad-sub">Public reports are not official until verified.</p>
           </div>
           <DashboardFilters filters={filters} years={years} categories={categories} onChange={setFilters} />

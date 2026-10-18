@@ -1,4 +1,5 @@
 import express from 'express';
+import PDFDocument from 'pdfkit';
 import pool from '../config/db.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 
@@ -197,9 +198,18 @@ router.get('/reports/summaries', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Reporter-written text can start with = + - @ and be run as a formula when the CSV is opened
+// in Excel. Prefixing an apostrophe makes the spreadsheet treat the cell as plain text.
+const csvCell = (v) => {
+  let t = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+  return '"' + t.replace(/"/g, '""') + '"';
+};
+
 router.get('/reports/export', async (req, res, next) => {
   try {
-    if (req.query.format !== 'csv') return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=csv required' } });
+    const format = req.query.format;
+    if (!['csv', 'pdf'].includes(format)) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=csv or format=pdf required' } });
     if (req.user.role !== 'admin') return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only' } });
 
     const { status, category_id, date_from, date_to, verified } = req.query;
@@ -225,18 +235,43 @@ router.get('/reports/export', async (req, res, next) => {
     query += ' ORDER BY r.created_at DESC';
 
     const [reports] = await pool.query(query, params);
+    // Every export states its scope up front, so an unverified export can never be mistaken for official data.
+    const scopeText = scope === 'all'
+      ? 'INCLUDES UNVERIFIED public-submitted reports, which are not official records'
+      : scope === 'unverified'
+        ? 'Unverified public-submitted reports only, not official records'
+        : 'Verified official records only';
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="accident-reports-${scope}-${stamp}.pdf"`);
+      const doc = new PDFDocument({ size: 'A4', margin: 40, info: { Title: 'Road Accident Reports' } });
+      doc.pipe(res);
+      doc.fontSize(16).text('Road Accident Reports', { align: 'left' });
+      doc.fontSize(9).fillColor('#555').text(`Generated ${stamp} | ${reports.length} report(s)`);
+      doc.fillColor(scope === 'verified' ? '#1a6b2f' : '#a33').text(scopeText).fillColor('#000').moveDown(0.8);
+      reports.forEach((r, i) => {
+        if (doc.y > 700) doc.addPage();
+        doc.fontSize(11).font('Helvetica-Bold').text(`${r.report_reference}  -  ${r.title}`);
+        doc.font('Helvetica').fontSize(9)
+          .text(`Status: ${r.status}   Type: ${r.category_name || 'Uncategorized'}   Injury: ${r.injury_status}${r.severity ? '   Severity: ' + r.severity : ''}`)
+          .text(`Date/time: ${String(r.accident_date).slice(0, 10)} ${r.accident_time || ''}   Location: ${r.location}`)
+          .text(`Vehicles: ${r.vehicle_type || 'n/a'}${r.vehicles_involved != null ? ' (' + r.vehicles_involved + ')' : ''}   Injuries: ${r.injuries ?? 'n/a'}   Fatalities: ${r.fatalities ?? 'n/a'}`);
+        if (r.description) doc.text(String(r.description).slice(0, 600), { width: 515 });
+        doc.moveDown(0.6);
+        if (i < reports.length - 1) doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor('#ccc').stroke().strokeColor('#000').moveDown(0.6);
+      });
+      if (reports.length === 0) doc.fontSize(10).text('No reports match these filters.');
+      doc.end();
+      return;
+    }
+
     const headers = ['report_reference','title','description','accident_date','accident_time','location','vehicle_type','injury_status','severity','vehicles_involved','injuries','fatalities','status','reporter_name','reporter_email','category_name','created_at'];
     const rows = reports.map(r => headers.map(h => r[h] ?? ''));
-    // Every export states its scope in the first row, so an unverified export can never be mistaken for official data.
-    const scopeLine = scope === 'all'
-      ? '# INCLUDES UNVERIFIED public-submitted reports, which are not official records'
-      : scope === 'unverified'
-        ? '# Unverified public-submitted reports only, not official records'
-        : '# Verified official records only';
-    const csv = [scopeLine, headers.join(','), ...rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','))].join('\n');
-
+    const csv = [`# ${scopeText}`, headers.join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="accident-reports-${scope}-${new Date().toISOString().slice(0,10)}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="accident-reports-${scope}-${stamp}.csv"`);
     res.send(csv);
   } catch (err) { next(err); }
 });

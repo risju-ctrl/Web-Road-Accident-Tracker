@@ -67,7 +67,7 @@ router.patch('/users/:id', async (req, res, next) => {
     const id = Number(req.params.id);
     const target = await User.findById(id);
     if (!target) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
-    const { name, phone, is_active } = req.body;
+    const { name, phone, is_active, email, password } = req.body;
     if (is_active !== undefined && Number(is_active) === 0 && id === req.user.id) {
       return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'You cannot deactivate your own account' } });
     }
@@ -75,11 +75,25 @@ router.patch('/users/:id', async (req, res, next) => {
     if (name !== undefined) update.name = String(name).trim();
     if (phone !== undefined) update.phone = phone;
     if (is_active !== undefined) update.is_active = Number(is_active) ? 1 : 0;
+    if (email !== undefined) {
+      if (!validator.isEmail(String(email).trim())) {
+        return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'A valid email is required' } });
+      }
+      update.email = String(email).trim().toLowerCase();
+    }
+    if (password) {
+      if (String(password).length < 8) {
+        return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters' } });
+      }
+      update.password = String(password);
+    }
     if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Nothing to update' } });
     }
     const user = await User.update(id, update);
-    await logAudit(req.user.id, 'UPDATE_USER', 'user', id, req, update);
+    const { password: newPassword, ...loggable } = update;
+    if (newPassword) loggable.password_reset = true;
+    await logAudit(req.user.id, 'UPDATE_USER', 'user', id, req, loggable);
     res.json(user);
   } catch (err) { next(err); }
 });
@@ -99,6 +113,27 @@ router.patch('/users/:id/role', async (req, res, next) => {
     const user = await User.update(id, { role });
     await logAudit(req.user.id, 'USER_ROLE_CHANGED', 'user', id, req, { from: target.role, to: role });
     res.json(user);
+  } catch (err) { next(err); }
+});
+
+router.delete('/users/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (id === req.user.id) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'You cannot delete your own account' } });
+    }
+    const target = await User.findById(id);
+    if (!target) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    try {
+      await User.remove(id);
+    } catch (err) {
+      if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+        return res.status(409).json({ error: { code: 'USER_HAS_RECORDS', message: 'This user has reports or activity on record and cannot be deleted. Deactivate the account instead.' } });
+      }
+      throw err;
+    }
+    await logAudit(req.user.id, 'DELETE_USER', 'user', id, req, { name: target.name, email: target.email, role: target.role });
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 

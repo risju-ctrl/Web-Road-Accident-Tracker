@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import Modal from './Modal';
 
 export default function NotificationBell() {
   const { user } = useAuth();
@@ -69,6 +70,8 @@ export default function NotificationBell() {
         onClick={() => setOpen(!open)}
         style={{ position: 'relative', padding: '0.5rem' }}
         aria-label="Notifications"
+        aria-haspopup="dialog"
+        aria-expanded={open}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -82,33 +85,36 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal" style={{ maxWidth: '400px', width: '95%' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0 }}>Notifications</h3>
-              {count > 0 && <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }} onClick={handleReadAll}>Mark all read</button>}
+        <Modal title="Notifications" onClose={() => setOpen(false)} width={420}>
+          {count > 0 && (
+            <div style={{ marginBottom: '0.75rem' }}>
+              <button className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.875rem' }} onClick={handleReadAll}>Mark all read</button>
             </div>
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
-            ) : notifications.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'hsl(var(--text-3))' }}>No notifications</div>
-            ) : (
-              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                {notifications.map(n => (
-                  <div key={n.id} style={{ padding: '0.75rem', borderBottom: '1px solid hsl(var(--line) / var(--line-alpha))', background: n.is_read ? 'transparent' : 'hsl(var(--accent) / 0.12)', cursor: 'pointer' }} onClick={() => !n.is_read && handleRead(n.id)}>
-                    <div style={{ fontWeight: n.is_read ? 'normal' : 'bold' }}>{n.message}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-3))', marginTop: '0.25rem' }}>
-                      {new Date(n.created_at).toLocaleString()}
-                    </div>
+          )}
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
+          ) : notifications.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'hsl(var(--text-3))' }}>No notifications</div>
+          ) : (
+            <div style={{ maxHeight: 'min(55vh, 380px)', overflowY: 'auto' }}>
+              {notifications.map(n => (
+                <div
+                  key={n.id}
+                  style={{ padding: '0.75rem', borderBottom: '1px solid hsl(var(--line) / var(--line-alpha))', background: n.is_read ? 'transparent' : 'hsl(var(--accent) / 0.12)', cursor: n.is_read ? 'default' : 'pointer' }}
+                  onClick={() => !n.is_read && handleRead(n.id)}
+                >
+                  <div style={{ fontWeight: n.is_read ? 'normal' : 'bold', overflowWrap: 'anywhere' }}>{n.message}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-3))', marginTop: '0.25rem' }}>
+                    {new Date(n.created_at).toLocaleString()}
                   </div>
-                ))}
-              </div>
-            )}
-            <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-              <button className="btn btn-secondary" onClick={() => setOpen(false)}>Close</button>
+                </div>
+              ))}
             </div>
+          )}
+          <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+            <button className="btn btn-secondary" onClick={() => setOpen(false)}>Close</button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

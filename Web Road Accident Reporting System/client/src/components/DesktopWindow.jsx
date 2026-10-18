@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import ThemeToggle from './ThemeToggle';
 
 // The macOS-style window every screen lives in: a wallpaper desktop, one large
 // rounded window, and a unified toolbar that carries the traffic lights. The
@@ -6,12 +7,12 @@ import { Link } from 'react-router-dom';
 
 export function Logo() {
   return (
-    <Link to="/dashboard" className="rw-brand">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path d="M8 3 4 21M16 3l4 18" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" fill="none" />
-        <path d="M12 5v3M12 11v3M12 17v3" stroke="#E8DFB5" strokeWidth="2.4" strokeLinecap="round" />
-      </svg>
-      Roadwatch.
+    <Link to="/dashboard" className="rw-brand" aria-label="AGAP, road incident reporting">
+      <img className="agap-mark" src="/agap-mark.png" alt="" width="32" height="32" />
+      <span className="agap-name">
+        <strong>AGAP</strong>
+        <small>Road incident reporting</small>
+      </span>
     </Link>
   );
 }
@@ -21,9 +22,8 @@ export default function DesktopWindow({ toolbar, children, contentClassName = ''
     <div className="rw-desktop">
       <div className="rw-window">
         <header className="rw-toolbar">
-          <div className="rw-lights" aria-hidden="true"><i /><i /><i /></div>
           <Logo />
-          {toolbar}
+          {toolbar ?? <div className="rw-tools"><ThemeToggle /></div>}
         </header>
         <main className={`rw-content ${contentClassName}`} {...contentProps}>
           {children}

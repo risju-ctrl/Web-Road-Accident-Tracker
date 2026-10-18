@@ -1,17 +1,15 @@
 import express from 'express';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
 import { Report } from '../models/Report.js';
 import { Evidence } from '../models/Evidence.js';
 import { StatusHistory } from '../models/StatusHistory.js';
 import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../utils/helpers.js';
+import { evidenceUpload, verifyUploadedFile, UPLOAD_ROOT, IMAGE_TYPES } from '../utils/upload.js';
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
 
 router.use(requireAuth);
 
@@ -31,8 +29,8 @@ router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const status = req.query.status || null;
-    const reports = await Report.list(req.user, status);
+    const { status, date_from, date_to, category_id, location, q } = req.query;
+    const reports = await Report.list(req.user, { status, date_from, date_to, category_id, location, q });
     res.json(reports);
   } catch (err) { next(err); }
 });
@@ -49,22 +47,25 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.patch('/:id', requireRole('reporter'), async (req, res, next) => {
+router.patch('/:id', requireRole('reporter', 'admin'), async (req, res, next) => {
   try {
     const report = await Report.findById(req.params.id);
     if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
-    if (report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Not your report' } });
-    if (!['submitted','needs_clarification'].includes(report.status)) return res.status(422).json({ error: { code: 'INVALID_STATUS', message: 'Cannot edit in current status' } });
+    const isOwner = req.user.role === 'reporter';
+    if (isOwner) {
+      if (report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Not your report' } });
+      if (!['submitted','needs_clarification'].includes(report.status)) return res.status(422).json({ error: { code: 'INVALID_STATUS', message: 'Cannot edit in current status' } });
+    }
     const updated = await Report.update(report.id, req.body, req.user);
     await logAudit(req.user.id, 'UPDATE_REPORT', 'report', report.id, req, req.body);
     await Notification.create({
       userId: report.reporter_id,
       reportId: report.id,
       event: 'report.updated',
-      message: `Your report ${report.report_reference} was updated.`
+      message: `Your report ${report.report_reference} was updated${isOwner ? '' : ' by an administrator'}.`
     });
     // Supplying the requested information itself moves the report back to Under Review.
-    if (report.status === 'needs_clarification') {
+    if (isOwner && report.status === 'needs_clarification') {
       const backUnderReview = await Report.updateStatus(report.id, 'under_review', req.user.id, {
         notes: 'Reporter provided the requested information'
       });
@@ -85,18 +86,21 @@ router.get('/:id/evidence/:evidenceId', async (req, res, next) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence not found' } });
     }
     // Files live on disk outside the web root and are only streamed after this authorization check.
-    const uploadRoot = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
     const filePath = path.resolve(process.cwd(), evidence.file_path);
-    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+    if (!filePath.startsWith(UPLOAD_ROOT + path.sep)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence file is missing from storage' } });
-    res.setHeader('Content-Type', evidence.mime_type || 'application/octet-stream');
+    // Only verified images are shown inline. Everything else is forced to download, and a
+    // sandbox CSP stops any content from running even if a type check were ever bypassed.
+    const isImage = IMAGE_TYPES.includes(evidence.mime_type);
+    res.setHeader('Content-Type', isImage || evidence.mime_type === 'application/pdf' ? evidence.mime_type : 'application/octet-stream');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', `inline; filename="${String(evidence.file_name).replace(/["\r\n]/g, '')}"`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Content-Disposition', `${isImage ? 'inline' : 'attachment'}; filename="${String(evidence.file_name).replace(/["\r\n\\]/g, '')}"`);
     fs.createReadStream(filePath).on('error', next).pipe(res);
   } catch (err) { next(err); }
 });
 
-router.post('/:id/evidence', requireRole('reporter', 'admin', 'traffic_officer'), upload.single('file'), async (req, res, next) => {
+router.post('/:id/evidence', requireRole('reporter', 'admin', 'traffic_officer'), evidenceUpload.single('file'), verifyUploadedFile, async (req, res, next) => {
   try {
     const report = await Report.findById(req.params.id);
     if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
