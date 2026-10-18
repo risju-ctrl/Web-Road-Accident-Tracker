@@ -133,6 +133,35 @@ function cssColor(value, fallback = '#8a8a8a') {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 
+// RA-2026-000042 -> #0042. Short enough to sit under a pin without crowding it.
+export function shortRef(reference) {
+  const tail = String(reference || '').split('-').pop() || '';
+  const digits = tail.replace(/\D/g, '');
+  if (!digits) return String(reference || '');
+  return `#${digits.replace(/^0+/, '').padStart(4, '0')}`;
+}
+
+// Pulse speed by urgency: the worse the incident, the faster the blip.
+export const BLIP_TIERS = [
+  { key: 'fast', period: 0.9 },
+  { key: 'mid', period: 1.5 },
+  { key: 'slow', period: 2.4 }
+];
+const TIER_OF = { fatal: 'fast', major: 'fast', moderate: 'mid', minor: 'slow' };
+
+// Zone radii are in metres, but circle layers take pixels. At zoom 20 one pixel
+// covers about 0.07464 m x cos(latitude), and every zoom level below doubles it, so
+// the zone is described at zoom 20 (zoneR20) and scaled down exponentially.
+function zoneRadius(k = 1) {
+  return [
+    'interpolate', ['exponential', 2], ['zoom'],
+    0, ['*', ['get', 'zoneR20'], Math.pow(2, -20) * k],
+    22, ['*', ['get', 'zoneR20'], 4 * k]
+  ];
+}
+
+const LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];
+
 function pointFeature(lng, lat, properties = {}) {
   return {
     type: 'Feature',
@@ -469,7 +498,7 @@ const SEVERITY_COLOR_KEYS = {
 // Adds the sources and layers the report map draws. Safe to call repeatedly: it
 // is run after each style load, when Mapbox has dropped everything custom.
 function ensureReportLayers(map, colors) {
-  const sources = ['rw-route', 'rw-active', 'rw-focus', 'rw-picked', 'rw-pins'];
+  const sources = ['rw-zones', 'rw-route', 'rw-active', 'rw-focus', 'rw-picked', 'rw-pins'];
 
   sources.forEach((id) => {
     if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY });
@@ -485,6 +514,44 @@ function ensureReportLayers(map, colors) {
       paint
     });
   };
+
+  // Hotspot zones: a soft glow, a translucent disc with a ring, and one expanding
+  // ring per speed tier that the blip animation drives.
+  const zone = (id, paint, extra = {}) => {
+    if (map.getLayer(id)) return;
+    addTopLayer(map, {
+      id,
+      type: 'circle',
+      source: 'rw-zones',
+      paint: { 'circle-pitch-alignment': 'map', ...paint },
+      ...extra
+    });
+  };
+
+  zone('rw-zone-glow', {
+    'circle-radius': zoneRadius(1.18),
+    'circle-color': colors.red,
+    'circle-opacity': 0.16,
+    'circle-blur': 0.9
+  });
+  zone('rw-zone-fill', {
+    'circle-radius': zoneRadius(1),
+    'circle-color': colors.red,
+    'circle-opacity': 0.12,
+    'circle-stroke-color': colors.red,
+    'circle-stroke-width': 1.5,
+    'circle-stroke-opacity': 0.55
+  });
+  BLIP_TIERS.forEach((tier) => {
+    zone(`rw-zone-pulse-${tier.key}`, {
+      'circle-radius': zoneRadius(1),
+      'circle-color': colors.red,
+      'circle-opacity': 0,
+      'circle-stroke-color': colors.red,
+      'circle-stroke-width': 2,
+      'circle-stroke-opacity': 0.6
+    }, { filter: ['==', ['get', 'tier'], tier.key] });
+  });
 
   // A dark casing under the line keeps it readable on the pale basemaps.
   line('rw-route-casing', 'rw-route', {
@@ -532,6 +599,27 @@ function ensureReportLayers(map, colors) {
     });
   }
 
+  // Expanding blip behind each pin, one layer per speed tier.
+  BLIP_TIERS.forEach((tier) => {
+    const id = `rw-pin-pulse-${tier.key}`;
+    if (map.getLayer(id)) return;
+    addTopLayer(map, {
+      id,
+      type: 'circle',
+      source: 'rw-pins',
+      filter: ['all', ['==', ['get', 'pulse'], 1], ['==', ['get', 'tier'], tier.key]],
+      paint: {
+        'circle-radius': ['get', 'pulseR'],
+        'circle-color': ['get', 'color'],
+        'circle-opacity': 0.4,
+        'circle-stroke-color': ['get', 'color'],
+        'circle-stroke-width': 1.5,
+        'circle-stroke-opacity': 0.8,
+        'circle-pitch-alignment': 'map'
+      }
+    });
+  });
+
   if (!map.getLayer('rw-pin-halo')) {
     addTopLayer(map, {
       id: 'rw-pin-halo',
@@ -548,6 +636,35 @@ function ensureReportLayers(map, colors) {
     });
   }
 
+  // Report numbers under the pins. The short form shows when zoomed out and the
+  // full reference once there is room. Worst severity wins when labels collide.
+  const label = (id, field, minzoom, maxzoom) => {
+    if (map.getLayer(id)) return;
+    addTopLayer(map, {
+      id,
+      type: 'symbol',
+      source: 'rw-pins',
+      minzoom,
+      maxzoom,
+      filter: ['==', ['get', 'label'], 1],
+      layout: {
+        'text-field': ['get', field],
+        'text-font': LABEL_FONT,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 14, 12],
+        'text-offset': [0, 1.15],
+        'text-anchor': 'top',
+        'text-optional': true,
+        'text-allow-overlap': false,
+        'symbol-sort-key': ['get', 'rank']
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(11,18,32,0.92)',
+        'text-halo-width': 1.6
+      }
+    });
+  };
+
   if (!map.getLayer('rw-pin-core')) {
     addTopLayer(map, {
       id: 'rw-pin-core',
@@ -561,6 +678,9 @@ function ensureReportLayers(map, colors) {
       }
     });
   }
+
+  label('rw-pin-label-short', 'labelShort', 0, 12);
+  label('rw-pin-label-full', 'labelFull', 12, 24);
 }
 
 export function ReportMap({
@@ -578,7 +698,17 @@ export function ReportMap({
   routePath = null,
   activePath = null,
   pickedPoints = [],
-  onMapPick = null
+  onMapPick = null,
+  // Pin labels, hover preview and click-to-select. When onSelect is given a click
+  // selects the report in the page instead of opening Mapbox's own popup.
+  showLabels = false,
+  hoverId = null,
+  onHover = null,
+  onSelect = null,
+  // Hotspot zones ({ id, latitude, longitude, radiusM, tier, count }) and the blip.
+  zones = [],
+  blip = false,
+  onZoneSelect = null
 }) {
   const { user } = useAuth();
   const c = useThemeColors();
@@ -595,9 +725,15 @@ export function ReportMap({
   const reportsById = useRef(new Map());
   const userRef = useRef(user);
   const onMapPickRef = useRef(onMapPick);
+  const onHoverRef = useRef(onHover);
+  const onSelectRef = useRef(onSelect);
+  const onZoneSelectRef = useRef(onZoneSelect);
 
   userRef.current = user;
   onMapPickRef.current = onMapPick;
+  onHoverRef.current = onHover;
+  onSelectRef.current = onSelect;
+  onZoneSelectRef.current = onZoneSelect;
 
   const colors = useMemo(() => ({
     accent: cssColor(c.accent, '#efe2b0'),
@@ -631,6 +767,7 @@ export function ReportMap({
       let coreR = 8;
       let stroke = '#0b1220';
       let strokeW = 2;
+      const hot = hoverId != null && report.id === hoverId;
 
       if (colorBySeverity) {
         // A wide translucent halo behind a solid core reads as a hotspot pin.
@@ -641,6 +778,14 @@ export function ReportMap({
         coreR = 6;
         stroke = color;
         strokeW = 1.5;
+
+        if (hot) {
+          haloR = 30;
+          haloOpacity = 0.35;
+          coreR = 8;
+          stroke = '#ffffff';
+          strokeW = 2.5;
+        }
       } else if (colorFor) {
         // `colorFor` lets a caller (the dashboard) colour pins by its own
         // field, such as verified versus still-pending.
@@ -659,6 +804,13 @@ export function ReportMap({
 
       features.push(pointFeature(lng, lat, {
         id: report.id,
+        label: showLabels ? 1 : 0,
+        pulse: blip && colorBySeverity ? 1 : 0,
+        tier: TIER_OF[report.severity] || 'slow',
+        pulseR: 10,
+        labelShort: shortRef(report.report_reference),
+        labelFull: report.report_reference || '',
+        rank: { fatal: 0, major: 1, moderate: 2, minor: 3 }[report.severity] ?? 4,
         color,
         haloR,
         haloOpacity,
@@ -669,7 +821,19 @@ export function ReportMap({
     });
 
     return { type: 'FeatureCollection', features };
-  }, [reports, glow, activeId, colorBySeverity, colorFor, colors]);
+  }, [reports, glow, activeId, colorBySeverity, colorFor, colors, showLabels, hoverId, blip]);
+
+  const zoneData = useMemo(() => ({
+    type: 'FeatureCollection',
+    features: zones
+      .filter((z) => hasCoordinates(z.latitude, z.longitude))
+      .map((z) => pointFeature(Number(z.longitude), Number(z.latitude), {
+        id: z.id,
+        count: z.count,
+        tier: z.tier || 'slow',
+        zoneR20: z.radiusM / (0.07464 * Math.max(0.2, Math.cos((Number(z.latitude) * Math.PI) / 180)))
+      }))
+  }), [zones]);
 
   const reportPoints = useMemo(
     () => reports
@@ -693,10 +857,50 @@ export function ReportMap({
       const report = reportsById.current.get(feature.properties.id);
       if (!report) return;
 
+      if (onSelectRef.current) {
+        onSelectRef.current(report);
+        return;
+      }
+
       const currentUser = userRef.current;
       const canViewDetails = Boolean(currentUser && currentUser.role !== 'reporter');
 
       openReportPopup(map, report, feature.geometry.coordinates.slice(), canViewDetails);
+    };
+
+    // Hover preview. The anchor is the pin's screen position, recomputed while the
+    // map moves so the card stays attached to the pin it describes.
+    let hovered = null;
+    const emit = () => {
+      if (!hovered || !onHoverRef.current) return;
+      const point = map.project(hovered.coordinates);
+      onHoverRef.current(hovered.report, { x: point.x, y: point.y });
+    };
+    const onPinMove = (event) => {
+      const feature = event.features && event.features[0];
+      if (!feature || !onHoverRef.current) return;
+
+      const report = reportsById.current.get(feature.properties.id);
+      if (!report) return;
+
+      if (!hovered || hovered.report.id !== report.id) {
+        hovered = { report, coordinates: feature.geometry.coordinates.slice() };
+        emit();
+      }
+    };
+    const onPinLeave = () => {
+      hovered = null;
+      if (onHoverRef.current) onHoverRef.current(null, null);
+    };
+
+    const onZoneClick = (event) => {
+      let onPin = false;
+      try {
+        onPin = map.queryRenderedFeatures(event.point, { layers: ['rw-pin-core'] }).length > 0;
+      } catch (error) { /* layer not drawn yet */ }
+      const feature = event.features && event.features[0];
+      if (onPin || !feature || !onZoneSelectRef.current) return;
+      onZoneSelectRef.current(feature.properties.id);
     };
 
     const onMapClick = (event) => {
@@ -712,16 +916,66 @@ export function ReportMap({
 
     map.on('click', 'rw-pin-core', onPinClick);
     map.on('click', onMapClick);
+    map.on('click', 'rw-zone-fill', onZoneClick);
     map.on('mouseenter', 'rw-pin-core', pointer);
     map.on('mouseleave', 'rw-pin-core', reset);
+    map.on('mousemove', 'rw-pin-core', onPinMove);
+    map.on('mouseleave', 'rw-pin-core', onPinLeave);
+    map.on('move', emit);
 
     return () => {
       map.off('click', 'rw-pin-core', onPinClick);
       map.off('click', onMapClick);
+      map.off('click', 'rw-zone-fill', onZoneClick);
       map.off('mouseenter', 'rw-pin-core', pointer);
       map.off('mouseleave', 'rw-pin-core', reset);
+      map.off('mousemove', 'rw-pin-core', onPinMove);
+      map.off('mouseleave', 'rw-pin-core', onPinLeave);
+      map.off('move', emit);
     };
   }, [map]);
+
+  // The blip. Mapbox cannot animate by itself, so the radius and opacity of the pulse
+  // layers are advanced on each frame (about 30 per second). Each tier has its own
+  // period, which is what makes serious incidents blink faster. Skipped when the
+  // visitor asks their system for reduced motion.
+  useEffect(() => {
+    if (!map || styleVersion === 0 || !blip) return undefined;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+
+    let frame = 0;
+    let last = 0;
+
+    const tick = (now) => {
+      frame = requestAnimationFrame(tick);
+      if (now - last < 33) return;
+      last = now;
+
+      try {
+        BLIP_TIERS.forEach((tier) => {
+          const phase = ((now / 1000) / tier.period) % 1;
+          const fade = 1 - phase;
+          const pin = `rw-pin-pulse-${tier.key}`;
+          const ring = `rw-zone-pulse-${tier.key}`;
+
+          if (map.getLayer(pin)) {
+            map.setPaintProperty(pin, 'circle-radius', ['*', ['get', 'pulseR'], 1 + phase * 2.4]);
+            map.setPaintProperty(pin, 'circle-opacity', fade * 0.45);
+            map.setPaintProperty(pin, 'circle-stroke-opacity', fade * 0.9);
+          }
+          if (map.getLayer(ring)) {
+            map.setPaintProperty(ring, 'circle-radius', zoneRadius(1 + phase * 0.22));
+            map.setPaintProperty(ring, 'circle-stroke-opacity', fade * 0.8);
+          }
+        });
+      } catch (error) {
+        // The style is mid-switch; the loop carries on once it has loaded.
+      }
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [map, styleVersion, blip]);
 
   useEffect(() => {
     if (map) map.getCanvas().style.cursor = onMapPick ? 'crosshair' : '';
@@ -734,6 +988,7 @@ export function ReportMap({
     try {
       ensureReportLayers(map, colorsRef.current);
 
+      setSourceData(map, 'rw-zones', zoneData);
       setSourceData(map, 'rw-pins', pinData);
       setSourceData(map, 'rw-route', lineFeature(routePath));
       setSourceData(map, 'rw-active', lineFeature(activePath));
@@ -756,7 +1011,7 @@ export function ReportMap({
     } catch (error) {
       // A style is mid-switch; this effect runs again when it finishes loading.
     }
-  }, [map, styleVersion, pinData, routePath, activePath, pickedPoints, focus, glow, colors]);
+  }, [map, styleVersion, pinData, zoneData, routePath, activePath, pickedPoints, focus, glow, colors]);
 
   useEffect(() => {
     if (map && hasCoordinates(focus?.latitude, focus?.longitude)) {
