@@ -95,7 +95,7 @@ router.get('/dashboard/stats', async (req, res, next) => {
     const from = `${Math.min(year, compareYear)}-01-01`;
     const to = `${Math.max(year, compareYear) + 1}-01-01`;
     const [rows] = await pool.query(`
-      SELECT r.id, r.report_reference, r.status, r.injury_status, r.fatalities, r.vehicle_type,
+      SELECT r.id, r.report_reference, r.title, r.status, r.injury_status, r.fatalities, r.vehicle_type,
              r.latitude, r.longitude, r.location, r.accident_date, r.accident_time,
              r.verified_at, r.created_at, ac.name AS category_name
       FROM reports r
@@ -143,7 +143,17 @@ router.get('/dashboard/stats', async (req, res, next) => {
           status: r.status, accident_date: r.accident_date, accident_time: r.accident_time,
           location: r.location, _type: isOfficial(r) ? 'verified' : 'unverified'
         })),
-      needsAttention: attention
+      needsAttention: attention,
+      // Every report submitted in the selected year (newest first), for the Report List table.
+      // Reporter name and contact are never included.
+      reportList: [...cur]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 200)
+        .map((r) => ({
+          id: r.id, report_reference: r.report_reference, title: r.title, status: r.status,
+          location: r.location, created_at: r.created_at, category_name: r.category_name,
+          injury_status: r.injury_status
+        }))
     });
   } catch (err) { next(err); }
 });
@@ -213,6 +223,8 @@ router.get('/reports/export', async (req, res, next) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only' } });
 
     const { status, category_id, date_from, date_to, verified } = req.query;
+    const exportYear = parseInt(req.query.year, 10) || null;
+    const exportLocation = String(req.query.location || '').trim().slice(0, 100);
     // Verified official records only by default. verified=all adds public-submitted reports.
     const scope = verified === 'false' ? 'unverified' : verified === 'all' ? 'all' : 'verified';
     let query = `
@@ -230,6 +242,9 @@ router.get('/reports/export', async (req, res, next) => {
     if (category_id) { query += ' AND r.accident_category_id = ?'; params.push(category_id); }
     if (date_from) { query += ' AND r.accident_date >= ?'; params.push(date_from); }
     if (date_to) { query += ' AND r.accident_date <= ?'; params.push(date_to); }
+    // The Analytics page counts by the year a report was submitted, so its export filters the same way.
+    if (exportYear) { query += ' AND YEAR(r.created_at) = ?'; params.push(exportYear); }
+    if (exportLocation) { query += ' AND r.location LIKE ?'; params.push(`%${exportLocation}%`); }
     if (scope === 'verified') { query += ' AND r.verified_at IS NOT NULL AND r.status != "rejected"'; }
     if (scope === 'unverified') { query += ' AND (r.verified_at IS NULL OR r.status = "rejected")'; }
     query += ' ORDER BY r.created_at DESC';

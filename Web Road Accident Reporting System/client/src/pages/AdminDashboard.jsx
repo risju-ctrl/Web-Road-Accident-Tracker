@@ -1,49 +1,125 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { DashboardFilters } from '../components/dashboard/DashboardWidgets';
-import {
-  RED, STAGES, STAGE_PROGRESS, stageLabel, stageColor, MONTHS, DAYS, SLOT_LABELS,
-  Icon, Chip, ProgressList, RankList, ComboChart, Heat, HeatLegend, Donut, toRows, useIsDark,
-} from '../components/AnalyticsCharts';
 import { mockDashboard } from '../components/dashboard/mockDashboard';
-import '../dashboard.css';
-import '../agapHero.css';
+import {
+  STAGES, STAGE_PROGRESS, stageLabel, stageVar, MONTHS, DAYS, SLOT_LABELS,
+  Icon, Delta, ProgressList, RankList, Legend, GroupedBars, SmoothLine, AreaTrend, Ring, Heat, HeatLegend, toRows,
+} from '../components/AnalyticsCharts';
+import '../analytics.css';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_DASHBOARD === 'true';
 const THIS_YEAR = new Date().getFullYear();
+const PAGE = 10;
 
-const KPI_ROWS = [
-  ['pending', 'Pending', 'clock'],
-  ['verified', 'Verified (official)', 'shield'],
-  ['closed', 'Resolved / Closed', 'check'],
-  ['fatal', 'With Fatalities', 'alert'],
+const KPIS = [
+  { key: 'submitted', title: 'Total submitted', icon: 'file', tone: '--accent' },
+  { key: 'pending', title: 'Pending', icon: 'clock', tone: '--level-moderate', badUp: true },
+  { key: 'verified', title: 'Verified (official)', icon: 'shield', tone: '--level-light' },
+  { key: 'closed', title: 'Resolved / closed', icon: 'check', tone: '--level-none' },
+  { key: 'fatal', title: 'With fatalities', icon: 'alert', tone: '--level-severe', badUp: true },
 ];
-const INJURY = { none: '#10b981', injuries: '#f59e0b', fatalities: '#ef4444', unknown: '#9ca3af' };
+const INJURY_TOKEN = { none: '--level-none', injuries: '--level-moderate', fatalities: '--level-severe', unknown: '--text-3' };
+const DEFAULT_FILTERS = { year: THIS_YEAR, compareYear: THIS_YEAR - 1, scope: 'verified', typeId: '', status: '', location: '' };
 
-const when = (r) => new Date(r.incident_at || r.incident_date || r.created_at || r.createdAt);
-const val = (k) => Number(k?.value ?? k?.current ?? 0);
-const delta = (k) => {
-  const d = k?.deltaPct ?? k?.delta_pct ?? k?.change_pct ?? k?.pct;
-  if (typeof d === 'number') return Math.round(d);
-  const p = Number(k?.previous ?? k?.prev ?? k?.compare ?? k?.compareValue);
-  return p ? Math.round(((val(k) - p) / p) * 100) : null;
-};
-const pick = (r, keys) => { for (const k of keys) if (r[k] != null && r[k] !== '') return r[k]; return ''; };
+const val = (k) => Number(k?.value ?? 0);
 const fmtDate = (s) => {
   const d = new Date(s);
-  return isNaN(d) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' });
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' });
 };
+const sum = (a) => a.reduce((x, y) => x + y, 0);
+
+function Field({ label, children }) {
+  return <label className="an-field"><span>{label}</span>{children}</label>;
+}
+
+/* Export menu: downloads with the same year, scope, type, location and status the page is showing. */
+function ExportMenu({ filters }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const box = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+
+  const run = async (format) => {
+    setBusy(format);
+    setError('');
+    try {
+      // Fetched with the auth header and saved as a blob, so the token never appears in a URL.
+      const res = await api.get('/summaries/reports/export', {
+        params: {
+          format,
+          year: filters.year,
+          verified: filters.scope === 'all' ? 'all' : undefined,
+          category_id: filters.typeId || undefined,
+          status: filters.status || undefined,
+          location: filters.location.trim() || undefined,
+        },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `accident-reports-${filters.scope}-${filters.year}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch (err) {
+      console.error(err);
+      setError('Could not export. Try again.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  return (
+    <div className="an-export" ref={box}>
+      <button type="button" className="btn btn-primary" aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}>
+        <Icon name="download" size={16} /> Export reports <Icon name="chevron" size={14} />
+      </button>
+      {open && (
+        <div className="an-menu" role="menu">
+          <p className="an-menu-note">
+            {filters.year} · {filters.scope === 'all' ? 'All submitted (includes unverified)' : 'Verified only'}
+            {filters.status ? ` · ${stageLabel(filters.status)}` : ''}
+          </p>
+          <button type="button" role="menuitem" onClick={() => run('csv')} disabled={!!busy}>
+            {busy === 'csv' ? 'Preparing CSV…' : 'Download CSV'}<small>Spreadsheet</small>
+          </button>
+          <button type="button" role="menuitem" onClick={() => run('pdf')} disabled={!!busy}>
+            {busy === 'pdf' ? 'Preparing PDF…' : 'Download PDF'}<small>Printable</small>
+          </button>
+          {error && <p className="an-menu-err" role="alert">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
-  const [filters, setFilters] = useState({ year: THIS_YEAR, compareYear: THIS_YEAR - 1, scope: 'verified', typeId: '', location: '' });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [location, setLocation] = useState('');
   const [categories, setCategories] = useState([]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [tab, setTab] = useState('all');
-  const dark = useIsDark();
+  const [metric, setMetric] = useState('submitted');
+  const [shown, setShown] = useState(PAGE);
 
+  const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
+
+  // Wait a moment after typing before asking the server.
   useEffect(() => {
     const t = setTimeout(() => setLocation(filters.location.trim()), 400);
     return () => clearTimeout(t);
@@ -54,7 +130,7 @@ export default function AdminDashboard() {
     api.get('/accident-categories').then((r) => setCategories(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }, []);
 
-  const { year, compareYear, scope, typeId } = filters;
+  const { year, compareYear, scope, typeId, status } = filters;
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -69,167 +145,274 @@ export default function AdminDashboard() {
     return () => { alive = false; };
   }, [year, compareYear, scope, typeId, location]);
 
+  useEffect(() => { setShown(PAGE); }, [status, year, scope, typeId, location]);
+
   const years = useMemo(() => {
     const list = data?.meta?.years?.length ? [...data.meta.years] : [];
     [THIS_YEAR, THIS_YEAR - 1, +year, +compareYear].forEach((y) => { if (!list.includes(y)) list.push(y); });
     return list.sort((a, b) => b - a);
   }, [data, year, compareYear]);
 
+  const sameYear = +year === +compareYear;
+  const curName = sameYear ? `${year} (selected)` : String(year);
+  const prevName = sameYear ? `${compareYear} (compare)` : String(compareYear);
   const scopeLabel = scope === 'all' ? 'All submitted' : 'Verified only';
   const busy = loading && !data;
+  const dirty = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
 
-  const pipeline = STAGES.map(([key, name, color]) => ({ key, name, color, value: Number(data?.pipeline?.[key]) || 0 }));
-  const pipeTotal = pipeline.reduce((s, r) => s + r.value, 0);
+  // Month-by-month series come from the API, bucketed by the month each report was submitted.
+  const series = (key) => ({
+    current: data?.monthlySeries?.[key]?.current || Array(12).fill(0),
+    previous: data?.monthlySeries?.[key]?.previous || Array(12).fill(0),
+  });
+  const metricMeta = KPIS.find((k) => k.key === metric);
+  const bars = useMemo(() => {
+    const s = series(metric);
+    return MONTHS.map((month, i) => ({ month, current: s.current[i], previous: s.previous[i] }));
+  }, [data, metric]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const rate = useMemo(() => {
+    const sub = series('submitted').current;
+    const ver = series('verified').current;
+    return MONTHS.map((month, i) => ({ month, rate: sub[i] ? Math.round((ver[i] / sub[i]) * 100) : 0 }));
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const overallRate = val(data?.kpis?.submitted) ? Math.round((val(data?.kpis?.verified) / val(data?.kpis?.submitted)) * 100) : 0;
+
+  const running = useMemo(() => {
+    const s = series('submitted');
+    let a = 0, b = 0;
+    return MONTHS.map((month, i) => { a += s.current[i]; b += s.previous[i]; return { month, current: a, previous: b }; });
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pipeline = STAGES.map(([key, name]) => ({ key, name, value: Number(data?.pipeline?.[key]) || 0 })).filter((r) => r.value);
+  const pipeTotal = sum(pipeline.map((r) => r.value));
   const byType = toRows(data?.byType);
   const byVehicle = toRows(data?.byVehicle);
   const byInjury = toRows(data?.byInjury);
 
-  // Date-based charts read the map pins; each pin needs a date.
-  const pins = useMemo(() => (data?.locations || []).filter((r) => !isNaN(when(r)) && when(r).getFullYear() === +year), [data, year]);
-  const trend = useMemo(() => {
-    const n = Array(12).fill(0);
-    pins.forEach((r) => { n[when(r).getMonth()]++; });
-    return MONTHS.map((month, i) => {
-      const w = n.slice(Math.max(0, i - 1), i + 2);
-      return { month, Reports: n[i], Trend: +(w.reduce((a, b) => a + b, 0) / w.length).toFixed(2) };
-    });
-  }, [pins]);
+  // Busy periods use the date and time each accident happened (reports with a map pin).
   const grid = useMemo(() => {
     const g = DAYS.map(() => SLOT_LABELS.map(() => 0));
-    pins.forEach((r) => { const d = when(r); g[d.getDay()][Math.floor(d.getHours() / 2)]++; });
+    (data?.locations || []).forEach((r) => {
+      if (!r.accident_date || !r.accident_time) return;
+      const d = new Date(r.accident_date);
+      const hour = parseInt(String(r.accident_time).slice(0, 2), 10);
+      if (Number.isNaN(d.getTime()) || Number.isNaN(hour)) return;
+      g[d.getDay()][Math.floor(hour / 2)]++;
+    });
     return g;
-  }, [pins]);
+  }, [data]);
+  const timed = sum(grid.flat());
   const peak = useMemo(() => {
     let b = { v: 0, d: 0, s: 0 };
     grid.forEach((row, d) => row.forEach((v, s) => { if (v > b.v) b = { v, d, s }; }));
-    return b.v ? `${DAYS[b.d]} ${SLOT_LABELS[b.s]} - ${SLOT_LABELS[(b.s + 1) % 12]}` : null;
+    return b.v ? `${DAYS[b.d]} ${SLOT_LABELS[b.s]} to ${SLOT_LABELS[(b.s + 1) % 12]}` : null;
   }, [grid]);
 
-  const rows = (data?.needsAttention || []).map((r) => ({
-    id: r.id,
-    ref: pick(r, ['reference', 'reference_no', 'reference_number', 'ref']) || `#${r.id}`,
-    title: pick(r, ['title']),
-    type: pick(r, ['type', 'accident_type', 'type_name', 'category']),
-    place: pick(r, ['location', 'location_name', 'address']),
-    created: r.created_at || r.createdAt,
-    status: r.status,
-  }));
-  const tabs = ['all', ...new Set(rows.map((r) => r.status).filter(Boolean))];
-  const shown = tab === 'all' ? rows : rows.filter((r) => r.status === tab);
+  const all = data?.reportList || [];
+  const rows = (status ? all.filter((r) => r.status === status) : all);
+  const visible = rows.slice(0, shown);
 
   return (
     <div className="container">
-      <section className="ax" data-mode={dark ? 'dark' : 'light'}>
-        <header className="ax-head">
+      <section className="an">
+        <header className="an-head">
           <div>
             <h1>Analytics</h1>
-            <p className="ax-crumb"><span>Dashboard</span> / Analytics</p>
-            <p className="ax-muted ax-small">Public reports are not official until verified.</p>
+            <p className="an-crumb"><Link to="/dashboard">Dashboard</Link> / Analytics</p>
+            <p className="an-muted an-small">Public reports are not official until verified.</p>
           </div>
-          <div className="ad ax-filters"><DashboardFilters filters={filters} years={years} categories={categories} onChange={setFilters} /></div>
+          <ExportMenu filters={{ ...filters, location }} />
         </header>
-        {error && !data && <p className="ax-error">Could not load analytics. Check that the server is running.</p>}
-        {USE_MOCK && <p className="ax-muted ax-small">Showing sample data.</p>}
 
-        <div className="ax-top">
-          <div className="ax-kpis">
-            <div className="ax-hero-kpi">
-              <span className="ax-hero-ico"><Icon name="file" size={20} /></span>
-              <h3>Total Submitted</h3>
-              <div className="ax-hero-foot">
-                <b>{busy ? '-' : val(data?.kpis?.submitted)}</b>
-                <Chip pct={delta(data?.kpis?.submitted)} />
+        <div className="an-filters" role="group" aria-label="Analytics filters">
+          <Field label="Year">
+            <select value={year} onChange={set('year')}>{years.map((y) => <option key={y}>{y}</option>)}</select>
+          </Field>
+          <Field label="Compare with">
+            <select value={compareYear} onChange={set('compareYear')}>{years.map((y) => <option key={y}>{y}</option>)}</select>
+          </Field>
+          <Field label="Charts & map scope">
+            <select value={scope} onChange={set('scope')}>
+              <option value="verified">Verified only</option>
+              <option value="all">All submitted</option>
+            </select>
+          </Field>
+          <Field label="Accident type">
+            <select value={typeId} onChange={set('typeId')}>
+              <option value="">All types</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={status} onChange={set('status')}>
+              <option value="">All statuses</option>
+              {STAGES.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+            </select>
+          </Field>
+          <Field label="Location">
+            <input type="search" value={filters.location} onChange={set('location')} placeholder="Barangay / municipality" />
+          </Field>
+          {dirty && (
+            <button type="button" className="an-reset" onClick={() => { setFilters(DEFAULT_FILTERS); setLocation(''); }}>
+              <Icon name="reset" size={14} /> Reset
+            </button>
+          )}
+        </div>
+
+        {error && !data && <p className="an-error" role="alert">Could not load analytics. Check that the server is running.</p>}
+        {USE_MOCK && <p className="an-muted an-small">Showing sample data.</p>}
+
+        <div className="an-kpis">
+          {KPIS.map((k) => (
+            <div className="an-card an-kpi" key={k.key} style={{ '--tone': `var(${k.tone})` }}>
+              <div className="an-kpi-head">
+                <span className="an-ico"><Icon name={k.icon} /></span>
+                <h2 className="an-title">{k.title}</h2>
+              </div>
+              <b className="an-kpi-n">{busy ? '–' : val(data?.kpis?.[k.key]).toLocaleString('en-US')}</b>
+              {busy ? <span className="an-muted an-small">Loading…</span>
+                : <Delta pct={data?.kpis?.[k.key]?.yoy} badUp={k.badUp} compareYear={compareYear} />}
+            </div>
+          ))}
+        </div>
+
+        <div className="an-row an-row-wide">
+          <div className="an-card">
+            <div className="an-card-head">
+              <div>
+                <h2 className="an-title">Reports per month</h2>
+                <p className="an-sub">{metricMeta.title}, {year} against {compareYear}</p>
+              </div>
+              <select className="an-mini" value={metric} onChange={(e) => setMetric(e.target.value)} aria-label="Measure">
+                {KPIS.map((k) => <option key={k.key} value={k.key}>{k.title}</option>)}
+              </select>
+            </div>
+            <Legend items={[{ name: curName, color: 'hsl(var(--accent))' }, { name: prevName, color: 'hsl(var(--status-in_progress))' }]} />
+            {sum(bars.map((b) => b.current + b.previous)) ? <GroupedBars rows={bars} currentName={curName} previousName={prevName} />
+              : <p className="an-empty">No {metricMeta.title.toLowerCase()} reports in {year} or {compareYear}.</p>}
+          </div>
+
+          <div className="an-card">
+            <div className="an-card-head">
+              <div>
+                <h2 className="an-title">Report pipeline</h2>
+                <p className="an-sub">Where every {year} report stands</p>
               </div>
             </div>
-            {KPI_ROWS.map(([key, title, icon]) => (
-              <div className="ax-card ax-kpi" key={key}>
-                <div className="ax-kpi-head"><span className="ax-ico"><Icon name={icon} /></span><span>{title}</span></div>
-                <b>{busy ? '-' : val(data?.kpis?.[key])}</b>
-                <Chip pct={delta(data?.kpis?.[key])} />
+            {pipeTotal ? <Ring rows={pipeline} label="reports" colorFor={(k, c) => c.status[k] || c.muted} />
+              : <p className="an-empty">No reports yet.</p>}
+          </div>
+        </div>
+
+        <div className="an-row">
+          <div className="an-card">
+            <div className="an-card-head">
+              <div>
+                <h2 className="an-title">Verification rate</h2>
+                <p className="an-sub">Share of each month's reports that are now verified</p>
               </div>
-            ))}
+              <div className="an-avg">
+                <span className="an-muted an-small">Overall {overallRate}%</span>
+                <div className="an-bar"><i style={{ width: `${overallRate}%`, background: 'hsl(var(--level-violet))' }} /></div>
+              </div>
+            </div>
+            {sum(rate.map((r) => r.rate)) ? <SmoothLine rows={rate} dataKey="rate" name="Verified" unit="%" />
+              : <p className="an-empty">No verified reports in {year} yet.</p>}
           </div>
 
-          <div className="ax-card">
-            <div className="ax-card-head"><h2>Reports per month</h2><span className="ax-pill">{year}</span></div>
-            <div className="ax-big">{pins.length}<small> reports with a date</small></div>
-            {pins.length ? <ComboChart rows={trend} dark={dark} /> : <p className="ax-muted ax-note">Needs a date on each report location from the API.</p>}
+          <div className="an-card">
+            <div className="an-card-head">
+              <div>
+                <h2 className="an-title">Running total</h2>
+                <p className="an-sub">Submitted reports added up through the year</p>
+              </div>
+              <span className="an-big">{running[11].current.toLocaleString('en-US')}</span>
+            </div>
+            {running[11].current + running[11].previous ? <AreaTrend rows={running} currentName={curName} previousName={prevName} />
+              : <p className="an-empty">No reports in {year} or {compareYear}.</p>}
           </div>
         </div>
 
-        <div className="ax-mid">
-          <div className="ax-card">
-            <div className="ax-card-head"><h2>Vehicle Types</h2></div>
-            {byVehicle.length ? <ProgressList rows={byVehicle} /> : <p className="ax-muted ax-note">No data</p>}
+        <div className="an-row an-row-3">
+          <div className="an-card">
+            <div className="an-card-head"><h2 className="an-title">Accident types</h2><span className="an-muted an-small">{scopeLabel}</span></div>
+            {byType.length ? <RankList rows={byType} /> : <p className="an-empty">No data</p>}
           </div>
-          <div className="ax-card">
-            <div className="ax-card-head"><h2>Accident Types</h2><span className="ax-muted ax-small">{scopeLabel}</span></div>
-            {byType.length ? <RankList rows={byType} /> : <p className="ax-muted ax-note">No data</p>}
+          <div className="an-card">
+            <div className="an-card-head"><h2 className="an-title">Vehicle types</h2><span className="an-muted an-small">{scopeLabel}</span></div>
+            {byVehicle.length ? <ProgressList rows={byVehicle} /> : <p className="an-empty">No data</p>}
           </div>
-          <div className="ax-card ax-wide">
-            <div className="ax-card-head"><h2>Busy Periods</h2><span className="ax-pill">{year}</span></div>
-            {pins.length ? (
-              <>
-                <div className="ax-heat-meta">
-                  <span>Highest activity <b>{peak || '-'}</b></span><HeatLegend dark={dark} />
-                </div>
-                <Heat grid={grid} dark={dark} />
-              </>
-            ) : <p className="ax-muted ax-note">Needs a date on each report location from the API.</p>}
+          <div className="an-card">
+            <div className="an-card-head"><h2 className="an-title">Injury level</h2><span className="an-muted an-small">{scopeLabel}</span></div>
+            {byInjury.length
+              ? <Ring rows={byInjury} label="reports" colorFor={(k, c) => (k === 'unknown' ? c.muted : c[{ none: 'green', injuries: 'amber', fatalities: 'red' }[k]] || c.muted)} />
+              : <p className="an-empty">No data</p>}
           </div>
         </div>
 
-        <div className="ax-low">
-          <div className="ax-card">
-            <div className="ax-card-head"><h2>Report Pipeline</h2><span className="ax-pill">{year}</span></div>
-            {pipeTotal ? <ProgressList rows={pipeline.filter((r) => r.value)} /> : <p className="ax-muted ax-note">No reports yet</p>}
+        <div className="an-card">
+          <div className="an-card-head">
+            <div>
+              <h2 className="an-title">Busy periods</h2>
+              <p className="an-sub">When accidents happened, by weekday and two-hour block</p>
+            </div>
+            <span className="an-pill">{year}</span>
           </div>
-          <div className="ax-card">
-            <div className="ax-card-head"><h2>Injury Level</h2><span className="ax-muted ax-small">{scopeLabel}</span></div>
-            {byInjury.length ? <Donut rows={byInjury} colors={INJURY} dark={dark} /> : <p className="ax-muted ax-note">No data</p>}
-          </div>
+          {timed ? (
+            <>
+              <div className="an-heat-meta">
+                <span>Highest activity <b>{peak || '–'}</b></span><HeatLegend />
+              </div>
+              <Heat grid={grid} />
+            </>
+          ) : <p className="an-empty">Needs reports with a map pin, accident date and time.</p>}
         </div>
 
-        <div className="ax-card ax-table-card">
-          <div className="ax-card-head">
-            <h2>Report List</h2>
-            <div className="ax-tabs">
-              {tabs.map((t) => (
-                <button key={t} type="button" className={t === tab ? 'on' : ''} onClick={() => setTab(t)}>
-                  {t === 'all' ? 'All' : stageLabel(t)}
-                </button>
-              ))}
+        <div className="an-card an-table-card">
+          <div className="an-card-head">
+            <div>
+              <h2 className="an-title">Report list</h2>
+              <p className="an-sub">
+                {rows.length} {rows.length === 1 ? 'report' : 'reports'} submitted in {year}{status ? `, ${stageLabel(status).toLowerCase()}` : ''}
+              </p>
             </div>
           </div>
-          <div className="ax-scroll">
-            <table className="ax-table">
+          <div className="an-scroll">
+            <table className="an-table">
               <thead><tr><th>Reference</th><th>Report</th><th>Location</th><th>Submitted</th><th>Progress</th><th>Status</th></tr></thead>
               <tbody>
-                {shown.map((r) => (
-                  <tr key={r.id ?? r.ref}>
-                    <td className="ax-ref">{r.ref}</td>
-                    <td><b>{r.title || r.type}</b>{r.title && r.type ? <small>{r.type}</small> : null}</td>
-                    <td>{r.place}</td>
-                    <td>{fmtDate(r.created)}</td>
+                {visible.map((r) => (
+                  <tr key={r.id}>
+                    <td className="an-ref">{r.report_reference || `#${r.id}`}</td>
+                    <td><b>{r.title || r.category_name}</b>{r.title && r.category_name ? <small>{r.category_name}</small> : null}</td>
+                    <td>{r.location}</td>
+                    <td>{fmtDate(r.created_at)}</td>
                     <td>
-                      <div className="ax-prog">
-                        <div className="ax-bar"><i style={{ width: `${STAGE_PROGRESS[r.status] ?? 0}%` }} /></div>
+                      <div className="an-prog">
+                        <div className="an-bar"><i style={{ width: `${STAGE_PROGRESS[r.status] ?? 0}%` }} /></div>
                         <span>{STAGE_PROGRESS[r.status] ?? 0}%</span>
                       </div>
                     </td>
-                    <td><span className="ax-status" style={{ '--s': stageColor(r.status) }}>{stageLabel(r.status)}</span></td>
+                    <td><span className="an-status" style={{ '--s': stageVar(r.status) }}>{stageLabel(r.status)}</span></td>
                   </tr>
                 ))}
-                {!shown.length && <tr><td colSpan={6} className="ax-muted ax-note">Nothing in this list.</td></tr>}
+                {!visible.length && <tr><td colSpan={6} className="an-empty-cell">{busy ? 'Loading…' : 'No reports match these filters.'}</td></tr>}
               </tbody>
             </table>
           </div>
+          {rows.length > shown && (
+            <button type="button" className="btn btn-secondary an-more" onClick={() => setShown((n) => n + PAGE)}>
+              Show {Math.min(PAGE, rows.length - shown)} more
+            </button>
+          )}
         </div>
 
-        <p className="ax-muted ax-small ax-foot">
+        <p className="an-muted an-small an-foot">
           Each report is counted in the month it was submitted. Pending = Submitted + Under Review + Needs Clarification.
-          Verified = verified by staff and not rejected. Closed = Resolved. KPIs and the pipeline always include every report;
-          the scope filter affects the injury, type and vehicle widgets.
+          Verified = verified by staff and not rejected. Closed = Resolved. KPIs, the pipeline and the report list always include
+          every report; the scope filter affects the injury, type, vehicle and busy-period widgets. Status filters the report list
+          and the export.
         </p>
       </section>
     </div>

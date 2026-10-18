@@ -5,6 +5,7 @@ import api from '../services/api';
 import { SingleReportMap } from '../components/MapView';
 import { timeAgo } from '../services/format';
 import { Gallery, useEvidenceImages } from '../components/EvidenceGallery';
+import Modal from '../components/Modal';
 import '../reportDetail.css';
 
 const statusLabel = (s) => String(s || '').replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
@@ -20,6 +21,11 @@ export default function ReportDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusLoading, setStatusLoading] = useState(false);
+  const [officers, setOfficers] = useState(null); // null while loading, [] when there are none
+  const [officersFailed, setOfficersFailed] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [pickedOfficer, setPickedOfficer] = useState(null);
+  const [assignError, setAssignError] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -36,6 +42,14 @@ export default function ReportDetail() {
     }
     load();
   }, [id]);
+
+  // Admins pick from the active traffic officers instead of typing an ID.
+  useEffect(() => {
+    if (user.role !== 'admin') return;
+    api.get('/users', { params: { role: 'traffic_officer', is_active: 1 } })
+      .then((r) => setOfficers(Array.isArray(r.data) ? r.data : []))
+      .catch(() => { setOfficers([]); setOfficersFailed(true); });
+  }, [user.role]);
 
   const handleStatusChange = async (newStatus, reason) => {
     setStatusLoading(true);
@@ -57,17 +71,22 @@ export default function ReportDetail() {
 
   const handleAssign = async (officerId) => {
     setStatusLoading(true);
+    setAssignError('');
     try {
       await api.patch(`/reports/${id}/verify`, { status: 'assigned', assignedTo: officerId });
       const res = await api.get(`/reports/${id}`);
       setReport(res.data);
       setHistory(res.data.status_history || []);
+      setAssignOpen(false);
+      setPickedOfficer(null);
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Assign failed');
+      setAssignError(err.response?.data?.error?.message || 'Assign failed. Try again.');
     } finally {
       setStatusLoading(false);
     }
   };
+
+  const openAssign = () => { setAssignError(''); setPickedOfficer(null); setAssignOpen(true); };
 
   const handleFindings = async (findings) => {
     setStatusLoading(true);
@@ -219,7 +238,10 @@ export default function ReportDetail() {
               {user.role !== 'reporter' && (
                 <Fact label="Reported by" sub={report.reporter_email}>{report.reporter_name}</Fact>
               )}
-              {report.assigned_to && <Fact label="Assigned to">Officer #{report.assigned_to}</Fact>}
+              {report.assigned_to && (() => {
+                const o = (officers || []).find((x) => x.id === report.assigned_to);
+                return <Fact label="Assigned to" sub={o?.email}>{o ? o.name : `Officer #${report.assigned_to}`}</Fact>;
+              })()}
               {report.verified_by && <Fact label="Verified by" sub={report.verified_at ? new Date(report.verified_at).toLocaleString() : ''}>Admin #{report.verified_by}</Fact>}
             </dl>
             {(report.verification_notes || report.findings) && (
@@ -272,7 +294,12 @@ export default function ReportDetail() {
                 <button type="button" className="rd-btn" disabled={statusLoading || report.status === 'under_review'} onClick={() => handleStatusChange('under_review', prompt('Notes (optional):'))}>Under review</button>
                 <button type="button" className="rd-btn" disabled={statusLoading || report.status === 'needs_clarification'} onClick={() => handleStatusChange('needs_clarification', prompt('Notes (optional):'))}>Needs clarification</button>
               </div>
-              <button type="button" className="rd-btn rd-btn--wide" disabled={statusLoading} onClick={() => { const o = prompt('Assign to officer ID:'); if (o) handleAssign(Number(o)); }}>Assign officer</button>
+              <button type="button" className="rd-btn rd-btn--wide" disabled={statusLoading || report.status !== 'verified'} onClick={openAssign}>Assign officer</button>
+              {report.status !== 'verified' && (
+                <p className="rd-muted">
+                  {report.assigned_to ? 'This report already has an officer.' : 'Verify the report first, then you can assign an officer.'}
+                </p>
+              )}
               <p className="rd-muted">Every change is saved to the history with your note.</p>
             </section>
           )}
@@ -313,6 +340,40 @@ export default function ReportDetail() {
           </section>
         </aside>
       </div>
+      {assignOpen && (
+        <Modal title="Assign an officer" onClose={() => { if (!statusLoading) setAssignOpen(false); }}>
+          <p className="rd-muted" style={{ marginBottom: 12 }}>
+            Choose the traffic officer who will investigate {report.report_reference || `report #${report.id}`}. They will be notified.
+          </p>
+          {officers === null ? (
+            <p className="rd-muted">Loading officers…</p>
+          ) : officers.length === 0 ? (
+            <p className="rd-muted">
+              {officersFailed ? 'Could not load the officers. Close this and try again.' : 'There are no active traffic officers yet.'}{' '}
+              {!officersFailed && <Link to="/admin/users">Add one under Users</Link>}
+            </p>
+          ) : (
+            <ul className="rd-officers" role="radiogroup" aria-label="Traffic officers">
+              {officers.map((o) => (
+                <li key={o.id}>
+                  <label className={`rd-officer${pickedOfficer === o.id ? ' is-on' : ''}`}>
+                    <input type="radio" name="officer" checked={pickedOfficer === o.id} onChange={() => setPickedOfficer(o.id)} />
+                    <span><b>{o.name}</b><small>{o.email}</small></span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          {assignError && <p className="rd-assign-err" role="alert">{assignError}</p>}
+          <div className="rd-modal-actions">
+            <button type="button" className="rd-btn" disabled={statusLoading} onClick={() => setAssignOpen(false)}>Cancel</button>
+            <button type="button" className="rd-btn rd-btn--primary" disabled={statusLoading || pickedOfficer === null}
+              onClick={() => handleAssign(pickedOfficer)}>
+              {statusLoading ? 'Assigning…' : 'Assign officer'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
