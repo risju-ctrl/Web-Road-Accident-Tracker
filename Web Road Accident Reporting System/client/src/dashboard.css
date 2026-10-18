@@ -1,0 +1,241 @@
+/* Admin analytics console — the pipeline board.
+   Grammar is pinned by the ops-tabs brief: frosted panels (translucent surface,
+   blur, inset top highlight, hairline border) floating over a faint accent/violet
+   glow, uppercase tracked eyebrow titles, monospace references, and the
+   status/severity ramp as the only saturated colour. Built on the index.css
+   tokens, so dark and light themes both hold. */
+.ad {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.5fr 1fr;
+  grid-template-areas:
+    "sit sit"
+    "hd hd"
+    "kp kp"
+    "rail rail"
+    "map charts"
+    "na na"
+    "df df";
+  /* The glow is the ground the frosted panels diffuse; the shell itself paints
+     nothing else, so the page surface shows through the glass. */
+  background:
+    radial-gradient(80% 55% at 4% 6%, hsl(var(--accent) / 0.22), transparent 72%),
+    radial-gradient(70% 50% at 10% 96%, hsl(var(--level-violet) / 0.14), transparent 72%);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.ad * { box-sizing: border-box }
+
+/* On the light theme a strong accent wash would read as a stain, so the glow
+   retreats and the glass turns nearly solid. */
+:root[data-theme='light'] .ad {
+  background:
+    radial-gradient(80% 55% at 4% 6%, hsl(var(--accent) / 0.1), transparent 72%),
+    radial-gradient(70% 50% at 10% 96%, hsl(var(--level-violet) / 0.07), transparent 72%);
+}
+
+/* One frosted material for every panel on this screen. */
+.ad-panel, .ad-railwrap, .ad-kpis, .ad-sit, .ad-card {
+  background: hsl(var(--surface-1) / 0.66);
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha));
+}
+:root[data-theme='light'] .ad-panel,
+:root[data-theme='light'] .ad-railwrap,
+:root[data-theme='light'] .ad-kpis,
+:root[data-theme='light'] .ad-sit,
+:root[data-theme='light'] .ad-card { background: hsl(var(--surface-1) / 0.88); }
+
+.ad-panel { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ad-card { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+/* Eyebrow titles: the map sidebar's section-title treatment. */
+.ad-sec-title {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: hsl(var(--text-3));
+}
+
+/* Situation strip — the one-line operational readout every ops tab opens with. */
+.ad-sit {
+  grid-area: sit;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 22px;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  color: hsl(var(--text-2));
+}
+.ad-sit b { color: hsl(var(--text-1)); font-weight: 700; }
+.ad-sit-note { margin-left: auto; color: hsl(var(--text-3)); font-size: 0.75rem; }
+
+.ad-hd { grid-area: hd; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 4px 2px 0; }
+.ad-hd h1 { margin: 0 0 4px; font-size: 1.15rem; color: hsl(var(--text-1)); letter-spacing: -0.01em; }
+.ad-sub { margin: 0; color: hsl(var(--text-3)); font-size: 0.875rem; }
+.ad-brand { display: flex; flex-direction: column; gap: 2px; min-width: 230px; }
+
+.ad-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.ad-filters label { display: flex; flex-direction: column; gap: 3px; font-size: 0.75rem; font-weight: 600; color: hsl(var(--text-3)); }
+.ad-filters select, .ad-filters input {
+  background: hsl(var(--surface-2)); color: hsl(var(--text-1));
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm); padding: 6px 8px; font-size: 0.875rem; min-width: 130px;
+}
+
+/* KPI strip: one panel, five readings on hairline dividers. The number carries
+   rank by scale; colour only ever carries meaning (the YoY direction). */
+.ad-kpis { grid-area: kp; display: flex; padding: 10px 4px; }
+.ad-kpi {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 14px;
+  border-right: 1px solid hsl(var(--line) / var(--line-alpha));
+}
+.ad-kpi:last-child { border-right: 0; }
+.ad-kv { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.ad-kl { color: hsl(var(--text-3)); font-size: 0.75rem; }
+.ad-yoy { font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px; }
+.ad-caret { width: 0.5em; height: 0.5em; flex: none; }
+.ad-up { color: hsl(var(--level-none)); }
+.ad-dn { color: hsl(var(--level-severe)); }
+.ad-yoy-none { color: hsl(var(--text-3)); }
+
+/* The stage rail: the console's spine. Tabs step in weight by how many reports
+   they hold; the selected stage extends below the others; Needs Info carries an
+   amber edge because it is the stage that stalls on the reporter. */
+.ad-railwrap { grid-area: rail; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ad-rail { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+.ad-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 9px;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  background: hsl(var(--surface-2) / 0.6);
+  color: hsl(var(--text-1));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, padding-bottom 0.15s;
+}
+.ad-stage:hover { border-color: hsl(var(--accent) / 0.5); background: hsl(var(--surface-2)); }
+.ad-stage:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 2px; }
+.ad-stage.is-sel {
+  border-color: hsl(var(--accent));
+  background: hsl(var(--accent) / 0.16);
+  /* The selected stage extends: it hangs 4px below the row. */
+  padding-bottom: 13px;
+}
+.ad-stage.is-flag { border-color: hsl(var(--level-moderate) / 0.55); }
+.ad-stage.is-flag:hover { border-color: hsl(var(--level-moderate)); }
+.ad-pip { position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%; }
+.ad-stage-n {
+  padding-right: 14px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: hsl(var(--text-3));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ad-stage.is-sel .ad-stage-n { color: hsl(var(--accent-text)); }
+.ad-stage-c { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.ad-stage-bar { display: block; height: 4px; border-radius: 999px; background: hsl(var(--line) / var(--line-alpha)); overflow: hidden; margin-top: 3px; }
+.ad-stage-bar span { display: block; height: 100%; border-radius: 999px; }
+.ad-stage-skel { min-height: 62px; }
+.ad-scope { margin: 0; font-size: 0.75rem; color: hsl(var(--text-3)); }
+
+/* Body: map on the left, charts stacked on the right. */
+.ad-map { grid-area: map; }
+.ad-map-frame { height: 400px; border: 1px solid hsl(var(--line) / var(--line-strong-alpha)); border-radius: var(--radius-sm); overflow: hidden; background: hsl(var(--surface-0)); }
+.ad-map-legend { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 0.8125rem; color: hsl(var(--text-3)); }
+.ad-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+.ad-count { color: hsl(var(--text-1)); font-weight: 600; }
+
+.ad-charts { grid-area: charts; display: flex; flex-direction: column; gap: 12px; }
+.ad-charts > * { min-width: 0; }
+
+/* Needs attention: the queue that answers "what needs me". Rows past seven
+   days carry a red edge of tint and a hot waiting count. */
+.ad-na { grid-area: na; }
+.ad-na-hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.ad-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid hsl(var(--level-severe) / 0.45);
+  border-radius: 999px;
+  background: hsl(var(--level-severe) / 0.14);
+  color: color-mix(in srgb, hsl(var(--level-severe)) 55%, hsl(var(--text-1)) 45%);
+  font-size: 0.75rem;
+}
+.ad-alert b { font-weight: 700; }
+
+.ad-ref { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.75rem; color: hsl(var(--text-3)); }
+.ad-wait { text-align: right; color: hsl(var(--text-2)); font-weight: 600; white-space: nowrap; }
+.ad-wait.is-hot { color: hsl(var(--level-moderate)); }
+.ad-tbl tbody tr.is-hot { background: hsl(var(--level-severe) / 0.06); }
+.ad-tbl tbody tr.is-hot:hover { background: hsl(var(--level-severe) / 0.1); }
+
+.ad-df { grid-area: df; font-size: 0.8125rem; color: hsl(var(--text-3)); line-height: 1.6;
+  border-top: 1px solid hsl(var(--line) / var(--line-alpha)); margin: 2px 2px 0; padding-top: 10px; }
+.ad-df b { color: hsl(var(--text-2)); }
+
+/* Reused widget states. */
+.ad-skel { background: linear-gradient(90deg, hsl(var(--surface-2)), hsl(var(--line) / 0.12), hsl(var(--surface-2))); background-size: 200% 100%; animation: ad-sh 1.2s infinite; border-radius: var(--radius-sm); min-height: 90px; width: 100%; }
+@keyframes ad-sh { to { background-position: -200% 0 } }
+@media (prefers-reduced-motion: reduce) { .ad-skel { animation: none; } }
+.ad-state { min-height: 120px; display: flex; align-items: center; justify-content: center; color: hsl(var(--text-3)); font-size: 0.875rem; text-align: center; }
+.ad-err { color: hsl(var(--level-severe)); }
+
+/* Horizontal bar chart: red bars, value labels, sorted desc (done in component). */
+.ad-bar { display: grid; grid-template-columns: 120px 1fr; gap: 8px; align-items: center; margin: 7px 0; font-size: 0.875rem; }
+.ad-bar .l { text-align: right; color: hsl(var(--text-3)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-bar .tr { display: flex; align-items: center; gap: 6px; }
+.ad-bar-fill { height: 13px; background: hsl(var(--level-severe)); border-radius: 0 3px 3px 0; min-width: 2px; }
+
+/* Donut: drawn glyph beside its legend, total in the hole. */
+.ad-donut { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ad-donut .ring { position: relative; width: 150px; height: 150px; flex: none; }
+.ad-donut .ctr {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 1.15rem; font-weight: 700; color: hsl(var(--text-1)); pointer-events: none;
+}
+.ad-lg { list-style: none; margin: 0; padding: 0; font-size: 0.8125rem; color: hsl(var(--text-3)); display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px; }
+.ad-lg li { display: flex; align-items: center; gap: 6px; }
+.ad-lg i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+.ad-lg b { color: hsl(var(--text-1)); margin-left: auto; }
+
+/* Vehicle strip: drawn glyphs at one stroke weight, count, name. */
+.ad-veh { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; text-align: center; }
+.ad-veh .ic { width: 26px; height: 26px; margin: 0 auto 2px; }
+.ad-veh b { display: block; font-size: 1.25rem; line-height: 1.2; }
+.ad-veh small { color: hsl(var(--text-3)); font-size: 0.75rem; }
+
+.ad-scroll { overflow-x: auto; }
+
+@media (max-width: 900px) {
+  .ad { grid-template-columns: 1fr; grid-template-areas: "sit" "hd" "kp" "rail" "map" "charts" "na" "df"; }
+  /* The rail keeps all eight stages readable by scrolling inside its panel
+     rather than collapsing to eight squeezed columns. */
+  .ad-rail { display: flex; overflow-x: auto; padding-bottom: 4px; }
+  .ad-stage { flex: 0 0 128px; }
+  .ad-kpis { flex-wrap: wrap; }
+  .ad-kpi { flex: 1 0 40%; border-right: 0; border-bottom: 1px solid hsl(var(--line) / var(--line-alpha)); }
+  .ad-map-frame { height: 300px; }
+  .ad-filters > label, .ad-filters select, .ad-filters input { width: 100%; }
+}

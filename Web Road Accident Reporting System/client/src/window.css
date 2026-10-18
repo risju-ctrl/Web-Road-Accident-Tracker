@@ -1,0 +1,189 @@
+/* Roadwatch desktop: the dashboard's dark look, applied to every screen and
+   framed as a macOS window. This file loads after index.css, so it re-points the
+   shared tokens once and every page that reads them follows. The site is always
+   dark; there is no light theme any more. */
+
+:root,
+:root[data-theme='dark'],
+:root[data-theme='light'] {
+  --surface-0: 0 0% 4%;
+  --surface-1: 0 0% 7%;
+  --surface-2: 60 3% 11%;
+  --surface-3: 60 3% 16%;
+  --line: 0 0% 100%;
+  --line-alpha: 0.08;
+  --line-strong-alpha: 0.1;
+  --text-1: 45 20% 94%;
+  --text-2: 45 8% 76%;
+  --text-3: 45 5% 58%;
+
+  --accent: 48 52% 80%;
+  --accent-hover: 48 55% 86%;
+  --accent-ink: 0 0% 8%;
+  --accent-text: 48 52% 80%;
+
+  --status-submitted: 212 16% 72%;
+  --status-under_review: 43 96% 56%;
+  --status-needs_clarification: 27 96% 61%;
+  --status-verified: 172 66% 50%;
+  --status-assigned: 258 90% 70%;
+  --status-in_progress: 216 94% 64%;
+  --status-resolved: 160 84% 52%;
+  --status-rejected: 0 84% 60%;
+
+  --shadow-color: 0 0% 0%;
+  --shadow-alpha: 0.5;
+  --radius: 1.125rem;
+  --radius-sm: 0.75rem;
+
+  --rw-gap: clamp(6px, 0.8vw, 14px);
+  --rw-radius: 14px;
+  --rw-wallpaper: #c3c0ba;
+
+  color-scheme: dark;
+}
+
+html, body { background-color: var(--rw-wallpaper); height: 100%; }
+body { font-family: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+#root { height: 100%; }
+
+/* ---------- desktop + window ---------- */
+.rw-desktop {
+  height: 100dvh;
+  padding: var(--rw-gap);
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 700px at 12% 6%, #ddd7ca 0%, transparent 62%),
+    radial-gradient(900px 620px at 94% 98%, #a9a49b 0%, transparent 64%),
+    var(--rw-wallpaper);
+}
+.rw-window {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--rw-radius);
+  background: hsl(var(--surface-1));
+  color: hsl(var(--text-1));
+  overflow: hidden;
+  /* A hairline ring outside, a faint highlight inside, then the long soft drop
+     a macOS window casts on the desktop. */
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 40px 90px -24px rgba(0, 0, 0, 0.55),
+    0 12px 28px rgba(0, 0, 0, 0.25);
+}
+
+/* ---------- unified toolbar ---------- */
+.rw-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 54px;
+  padding: 7px 14px 7px 18px;
+  background: hsl(var(--surface-1) / 0.82);
+  backdrop-filter: blur(30px) saturate(180%);
+  border-bottom: 1px solid hsl(var(--line) / 0.07);
+  position: relative;
+  z-index: 20;
+}
+.rw-lights { display: flex; gap: 8px; margin-right: 4px; }
+.rw-lights i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.35); }
+.rw-lights i:nth-child(1) { background: #ff5f57; }
+.rw-lights i:nth-child(2) { background: #febc2e; }
+.rw-lights i:nth-child(3) { background: #28c840; }
+
+.rw-toolbar .rw-brand {
+  display: inline-flex; align-items: center; gap: 9px;
+  color: #fff; font-size: 1.1875rem; font-weight: 500; letter-spacing: -0.02em;
+  text-decoration: none; white-space: nowrap;
+}
+.rw-toolbar .rw-brand:hover { text-decoration: none; }
+
+.rw-nav { display: flex; gap: 2px; margin-left: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.rw-nav::-webkit-scrollbar { display: none; }
+.rw-toolbar .rw-nav a {
+  padding: 6px 12px; border-radius: 8px;
+  color: hsl(var(--text-3)); font-size: 0.875rem; font-weight: 400;
+  text-decoration: none; white-space: nowrap;
+  transition: background-color 0.12s, color 0.12s;
+}
+.rw-toolbar .rw-nav a:hover { color: hsl(var(--text-1)); background: hsl(var(--line) / 0.06); text-decoration: none; }
+.rw-toolbar .rw-nav a.active { color: #fff; background: hsl(var(--line) / 0.13); }
+
+.rw-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; flex: none; }
+.rw-tools .notification-bell .btn {
+  width: 38px; height: 38px; padding: 0 !important; border-radius: 50%;
+  background: hsl(var(--surface-2)); border: 1px solid hsl(var(--line) / 0.1); color: hsl(var(--text-1));
+}
+.rw-tools .notification-bell .btn:hover { background: hsl(var(--surface-3)); }
+
+.rw-user { position: relative; }
+.rw-chip {
+  display: inline-flex; align-items: center; gap: 9px; height: 40px; padding: 0 12px 0 4px;
+  border-radius: 999px; background: hsl(var(--surface-2)); border: 1px solid hsl(var(--line) / 0.1);
+  color: hsl(var(--text-1)); font: inherit; cursor: pointer;
+}
+.rw-chip:hover { background: hsl(var(--surface-3)); }
+.rw-avatar { width: 32px; height: 32px; border-radius: 50%; background: hsl(var(--accent)); color: #151514; display: grid; place-items: center; font-weight: 600; font-size: 0.75rem; }
+.rw-who { display: flex; flex-direction: column; text-align: left; line-height: 1.2; }
+.rw-who b { font-size: 0.8125rem; font-weight: 500; }
+.rw-who small { font-size: 0.6875rem; color: hsl(var(--text-3)); }
+.rw-menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 2000; min-width: 168px; padding: 5px;
+  border-radius: 12px; background: hsl(var(--surface-3) / 0.92); backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid hsl(var(--line) / 0.12); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+.rw-menu button { width: 100%; text-align: left; background: none; border: 0; color: hsl(var(--text-1)); font: inherit; font-size: 0.875rem; padding: 8px 12px; border-radius: 7px; cursor: pointer; }
+.rw-menu button:hover { background: hsl(var(--accent)); color: hsl(var(--accent-ink)); }
+
+/* ---------- content area ---------- */
+.rw-content { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 16px; }
+/* Pages wrap themselves in .container for the old centred column. The window is
+   the page now, so the column opens up to the full width. */
+.rw-content .container { max-width: none; margin-inline: auto; padding: 0; }
+/* The map is a full-bleed command centre inside the window. */
+.rw-content:has(.ops-page) { padding: 0; overflow: hidden; display: flex; }
+
+/* On desktop the map used to be pinned to the whole viewport, behind the old
+   top bar. It now sits inside the window, under the alert bar, so everything
+   that was pushed clear of the top bar only needs a normal inset. */
+@media (min-width: 1024px) {
+  .ops-map { position: absolute; }
+  .ops-rail { top: 0.75rem; }
+  .ops-page .leaflet-top.leaflet-left { top: 0.75rem; }
+}
+
+/* ---------- one surface for every panel ---------- */
+.card, .modal, .ops-panel, .ad-panel, .ad-railwrap, .ad-kpis, .ad-sit, .ad-card {
+  background: hsl(var(--surface-2));
+  backdrop-filter: none;
+  border: 1px solid hsl(var(--line) / 0.05);
+  border-radius: 18px;
+  box-shadow: none;
+}
+.modal { box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55); border-color: hsl(var(--line) / 0.1); }
+/* The glow was frosted glass's backdrop; the flat panels do not need it. */
+.ops-doc::before, .ops-body { background-image: none; }
+.ad { background: none; padding: 0; }
+
+.btn { border-radius: 999px; }
+.badge { border-radius: 999px; }
+
+/* Section labels read as card titles, like "Today's Reports", not as tracked caps. */
+.ad-sec-title, .ops-sec-title { font-size: 0.9375rem; font-weight: 500; letter-spacing: -0.01em; text-transform: none; color: hsl(var(--text-1)); }
+label { text-transform: none; letter-spacing: 0; font-size: 0.8125rem; font-weight: 400; }
+.table th { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+/* ---------- small screens: the window goes edge to edge ---------- */
+@media (max-width: 820px) {
+  :root, :root[data-theme='dark'], :root[data-theme='light'] { --rw-gap: 0px; --rw-radius: 0px; }
+  .rw-toolbar { flex-wrap: wrap; gap: 8px 12px; padding: 8px 12px; }
+  .rw-lights { display: none; }
+  .rw-nav { order: 3; width: 100%; margin-left: 0; }
+  .rw-who { display: none; }
+  .rw-chip { padding-right: 8px; }
+  .rw-content { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .rw-toolbar .rw-nav a { transition: none; } }

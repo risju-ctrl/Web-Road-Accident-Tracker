@@ -1,0 +1,9 @@
+﻿/* Glowing report pins: layered translucent halos around a bright core.
+   The selected pin gets a larger halo that slowly pulses. */
+.pin-core { filter: drop-shadow(0 0 5px rgba(255, 255, 255, .6)); }
+.pin-glow--pulse { transform-box: fill-box; transform-origin: center; animation: pin-pulse 2.2s ease-out infinite; }
+@keyframes pin-pulse {
+  0% { transform: scale(.55); opacity: 1; }
+  100% { transform: scale(1.25); opacity: .1; }
+}
+@media (prefers-reduced-motion: reduce) { .pin-glow--pulse { animation: none; } }

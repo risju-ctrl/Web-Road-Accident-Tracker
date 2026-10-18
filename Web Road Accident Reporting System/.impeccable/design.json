@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-18T00:00:00.000Z",
+  "title": "Design System: Road Accident Reporting",
+  "extensions": {
+    "colorMeta": {
+      "surface-ground": {
+        "role": "neutral",
+        "displayName": "Ground",
+        "canonical": "hsl(210 30% 6%)",
+        "tonalRamp": ["hsl(210 30% 15%)", "hsl(210 30% 26%)", "hsl(210 30% 37%)", "hsl(210 30% 48%)", "hsl(210 30% 60%)", "hsl(210 30% 72%)", "hsl(210 30% 84%)", "hsl(210 30% 95%)"]
+      },
+      "surface-panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "hsl(210 26% 9%)",
+        "tonalRamp": ["hsl(210 26% 15%)", "hsl(210 26% 26%)", "hsl(210 26% 37%)", "hsl(210 26% 48%)", "hsl(210 26% 60%)", "hsl(210 26% 72%)", "hsl(210 26% 84%)", "hsl(210 26% 95%)"]
+      },
+      "surface-raised": {
+        "role": "neutral",
+        "displayName": "Raised",
+        "canonical": "hsl(209 24% 13%)",
+        "tonalRamp": ["hsl(209 24% 15%)", "hsl(209 24% 26%)", "hsl(209 24% 37%)", "hsl(209 24% 48%)", "hsl(209 24% 60%)", "hsl(209 24% 72%)", "hsl(209 24% 84%)", "hsl(209 24% 95%)"]
+      },
+      "surface-track": {
+        "role": "neutral",
+        "displayName": "Track",
+        "canonical": "hsl(209 22% 17%)",
+        "tonalRamp": ["hsl(209 22% 15%)", "hsl(209 22% 26%)", "hsl(209 22% 37%)", "hsl(209 22% 48%)", "hsl(209 22% 60%)", "hsl(209 22% 72%)", "hsl(209 22% 84%)", "hsl(209 22% 95%)"]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Text I",
+        "canonical": "hsl(210 30% 94%)",
+        "tonalRamp": ["hsl(210 30% 15%)", "hsl(210 30% 26%)", "hsl(210 30% 37%)", "hsl(210 30% 48%)", "hsl(210 30% 60%)", "hsl(210 30% 72%)", "hsl(210 30% 84%)", "hsl(210 30% 95%)"]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Text II",
+        "canonical": "hsl(212 16% 72%)",
+        "tonalRamp": ["hsl(212 16% 15%)", "hsl(212 16% 26%)", "hsl(212 16% 37%)", "hsl(212 16% 48%)", "hsl(212 16% 60%)", "hsl(212 16% 72%)", "hsl(212 16% 84%)", "hsl(212 16% 95%)"]
+      },
+      "text-tertiary": {
+        "role": "neutral",
+        "displayName": "Text III",
+        "canonical": "hsl(213 15% 56%)",
+        "tonalRamp": ["hsl(213 15% 15%)", "hsl(213 15% 26%)", "hsl(213 15% 37%)", "hsl(213 15% 48%)", "hsl(213 15% 60%)", "hsl(213 15% 72%)", "hsl(213 15% 84%)", "hsl(213 15% 95%)"]
+      },
+      "accent-authority": {
+        "role": "primary",
+        "displayName": "Authority Blue",
+        "canonical": "hsl(216 94% 49%)",
+        "tonalRamp": ["hsl(216 94% 15%)", "hsl(216 94% 26%)", "hsl(216 94% 37%)", "hsl(216 94% 48%)", "hsl(216 94% 60%)", "hsl(216 94% 72%)", "hsl(216 94% 84%)", "hsl(216 94% 95%)"]
+      },
+      "accent-authority-hover": {
+        "role": "primary",
+        "displayName": "Authority Blue Hover",
+        "canonical": "hsl(216 95% 58%)",
+        "tonalRamp": ["hsl(216 95% 15%)", "hsl(216 95% 26%)", "hsl(216 95% 37%)", "hsl(216 95% 48%)", "hsl(216 95% 60%)", "hsl(216 95% 72%)", "hsl(216 95% 84%)", "hsl(216 95% 95%)"]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Accent Ink",
+        "canonical": "hsl(210 40% 99%)",
+        "tonalRamp": ["hsl(210 40% 15%)", "hsl(210 40% 26%)", "hsl(210 40% 37%)", "hsl(210 40% 48%)", "hsl(210 40% 60%)", "hsl(210 40% 72%)", "hsl(210 40% 84%)", "hsl(210 40% 95%)"]
+      },
+      "accent-text": {
+        "role": "primary",
+        "displayName": "Accent Text",
+        "canonical": "hsl(216 96% 68%)",
+        "tonalRamp": ["hsl(216 96% 15%)", "hsl(216 96% 26%)", "hsl(216 96% 37%)", "hsl(216 96% 48%)", "hsl(216 96% 60%)", "hsl(216 96% 72%)", "hsl(216 96% 84%)", "hsl(216 96% 95%)"]
+      },
+      "level-none": {
+        "role": "secondary",
+        "displayName": "Severity None",
+        "canonical": "hsl(160 84% 52%)",
+        "tonalRamp": ["hsl(160 84% 15%)", "hsl(160 84% 26%)", "hsl(160 84% 37%)", "hsl(160 84% 48%)", "hsl(160 84% 60%)", "hsl(160 84% 72%)", "hsl(160 84% 84%)", "hsl(160 84% 95%)"]
+      },
+      "level-light": {
+        "role": "secondary",
+        "displayName": "Severity Light",
+        "canonical": "hsl(172 66% 50%)",
+        "tonalRamp": ["hsl(172 66% 15%)", "hsl(172 66% 26%)", "hsl(172 66% 37%)", "hsl(172 66% 48%)", "hsl(172 66% 60%)", "hsl(172 66% 72%)", "hsl(172 66% 84%)", "hsl(172 66% 95%)"]
+      },
+      "level-moderate": {
+        "role": "secondary",
+        "displayName": "Severity Moderate",
+        "canonical": "hsl(43 96% 56%)",
+        "tonalRamp": ["hsl(43 96% 15%)", "hsl(43 96% 26%)", "hsl(43 96% 37%)", "hsl(43 96% 48%)", "hsl(43 96% 60%)", "hsl(43 96% 72%)", "hsl(43 96% 84%)", "hsl(43 96% 95%)"]
+      },
+      "level-heavy": {
+        "role": "secondary",
+        "displayName": "Severity Heavy",
+        "canonical": "hsl(27 96% 61%)",
+        "tonalRamp": ["hsl(27 96% 15%)", "hsl(27 96% 26%)", "hsl(27 96% 37%)", "hsl(27 96% 48%)", "hsl(27 96% 60%)", "hsl(27 96% 72%)", "hsl(27 96% 84%)", "hsl(27 96% 95%)"]
+      },
+      "level-severe": {
+        "role": "secondary",
+        "displayName": "Severity Severe",
+        "canonical": "hsl(0 84% 60%)",
+        "tonalRamp": ["hsl(0 84% 15%)", "hsl(0 84% 26%)", "hsl(0 84% 37%)", "hsl(0 84% 48%)", "hsl(0 84% 60%)", "hsl(0 84% 72%)", "hsl(0 84% 84%)", "hsl(0 84% 95%)"]
+      },
+      "level-violet": {
+        "role": "tertiary",
+        "displayName": "Assigned Violet",
+        "canonical": "hsl(258 90% 70%)",
+        "tonalRamp": ["hsl(258 90% 15%)", "hsl(258 90% 26%)", "hsl(258 90% 37%)", "hsl(258 90% 48%)", "hsl(258 90% 60%)", "hsl(258 90% 72%)", "hsl(258 90% 84%)", "hsl(258 90% 95%)"]
+      }
+    },
+    "typographyMeta": {
+      "page-title": { "displayName": "Page Title", "purpose": "One per page, in the header row beside its filters or actions." },
+      "reading": { "displayName": "Reading", "purpose": "KPI and pipeline-stage figures, always tabular." },
+      "body": { "displayName": "Body", "purpose": "Prose, table cells, list rows, alert text." },
+      "label": { "displayName": "Label", "purpose": "Panel titles, table headers, field captions, situation-strip captions." },
+      "reference": { "displayName": "Reference", "purpose": "Report references and other identifiers that must align." }
+    },
+    "shadows": [
+      { "name": "panel-glass", "value": "inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha))", "purpose": "The one elevation for floating surfaces (navbar, console panels, cards)." },
+      { "name": "modal-shell", "value": "inset 0 1px 0 hsl(var(--line) / 0.08), 0 16px 40px hsl(var(--shadow-color) / 0.62)", "purpose": "Modal and dialog shell over the blurred overlay." },
+      { "name": "field-focus-ring", "value": "0 0 0 1px hsl(var(--accent))", "purpose": "Accent ring on a focused input, select, or textarea." }
+    ],
+    "motion": [
+      { "name": "ease-settle", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "The app's one authored entrance: the situation strip settles in as a tab loads." },
+      { "name": "strip-in", "value": "0.32s", "purpose": "Duration of the strip entrance; dropped under prefers-reduced-motion." },
+      { "name": "state-standard", "value": "0.15s", "purpose": "Default easing for hover, border, and background state changes on controls." },
+      { "name": "row-hover", "value": "0.12s", "purpose": "Table row hover fill." },
+      { "name": "skeleton-shimmer", "value": "1.2s linear infinite", "purpose": "Loading placeholder sweep; dropped under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "container-max", "value": "1200px" },
+      { "name": "map-desktop", "value": "1024px" },
+      { "name": "console-collapse", "value": "900px" },
+      { "name": "map-drawer", "value": "820px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single affirmative action on a surface; filled from the one interactive accent.",
+      "html": "<button class=\"ds-btn-primary\">Submit report</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid transparent; font-family: inherit; font-weight: 500; font-size: 0.875rem; line-height: 1.2; background-color: hsl(var(--accent)); color: hsl(var(--accent-ink)); cursor: pointer; transition: background-color 0.15s, color 0.15s, opacity 0.15s; } .ds-btn-primary:hover { background-color: hsl(var(--accent-hover)); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The same box as the primary button with a raised fill; used for every non-committing action.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-sm); font-family: inherit; font-weight: 500; font-size: 0.875rem; line-height: 1.2; border: 1px solid hsl(var(--line) / var(--line-strong-alpha)); background-color: hsl(var(--surface-2)); color: hsl(var(--text-1)); cursor: pointer; transition: background-color 0.15s, color 0.15s; } .ds-btn-secondary:hover { background-color: hsl(var(--surface-3)); } .ds-btn-secondary:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "The status and role pill: a tint of its own hue with the text blended toward the theme text colour so it stays AA.",
+      "html": "<span class=\"ds-badge\">verified</span> <span class=\"ds-badge is-stall\">needs clarification</span>",
+      "css": ".ds-badge { --ds-badge: var(--status-verified); display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.02em; text-transform: capitalize; white-space: nowrap; background-color: hsl(var(--ds-badge) / 0.14); color: color-mix(in srgb, hsl(var(--ds-badge)) 75%, hsl(var(--text-1)) 25%); border: 1px solid hsl(var(--ds-badge) / 0.3); } .ds-badge.is-stall { --ds-badge: var(--status-needs_clarification); }"
+    },
+    {
+      "name": "Frosted Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The system's one floating surface: translucent fill, blur, hairline border, inset top highlight. Never nested.",
+      "html": "<section class=\"ds-panel\"><h2 class=\"ds-panel-title\">Needs attention</h2><p class=\"ds-panel-body\">3 reports have waited over 7 days.</p></section>",
+      "css": ".ds-panel { padding: 0.875rem; border-radius: var(--radius-sm); background-color: hsl(var(--surface-1) / 0.66); backdrop-filter: blur(18px) saturate(150%); border: 1px solid hsl(var(--line) / var(--line-strong-alpha)); box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha)); } .ds-panel-title { margin: 0; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: hsl(var(--text-3)); } .ds-panel-body { margin: 8px 0 0; font-size: 0.875rem; color: hsl(var(--text-2)); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Raised fill with a hairline border; focus turns the border accent and draws a one-pixel accent ring.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Location</span><input class=\"ds-input\" type=\"search\" placeholder=\"Barangay / municipality\" /></label>",
+      "css": ".ds-field { display: block; } .ds-field-label { display: block; margin-bottom: 0.3rem; font-size: 0.6875rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: hsl(var(--text-3)); } .ds-input { width: 100%; font-family: inherit; font-size: 0.9375rem; padding: 0.55rem 0.7rem; border-radius: var(--radius-sm); border: 1px solid hsl(var(--line) / var(--line-strong-alpha)); background-color: hsl(var(--surface-2)); color: hsl(var(--text-1)); transition: border-color 0.15s; } .ds-input::placeholder { color: hsl(var(--text-3)); } .ds-input:focus { outline: none; border-color: hsl(var(--accent)); box-shadow: 0 0 0 1px hsl(var(--accent)); }"
+    },
+    {
+      "name": "Navigation Pill",
+      "kind": "nav",
+      "description": "The floating sticky top bar; active route takes an accent tint.",
+      "html": "<nav class=\"ds-nav\"><strong>Road Accident Reporting</strong><span class=\"ds-nav-links\"><a class=\"is-active\" href=\"#\">Dashboard</a><a href=\"#\">Map</a><a href=\"#\">Reports</a></span></nav>",
+      "css": ".ds-nav { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin: 0.75rem; padding: 0.7rem 1.25rem; border-radius: var(--radius); border: 1px solid hsl(var(--line) / var(--line-strong-alpha)); background-color: hsl(var(--surface-1) / 0.55); backdrop-filter: blur(20px) saturate(150%); box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha)); position: sticky; top: 0.75rem; } .ds-nav strong { font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.01em; color: hsl(var(--text-1)); } .ds-nav-links { display: inline-flex; gap: 4px; } .ds-nav a { color: hsl(var(--text-2)); font-size: 0.875rem; font-weight: 500; padding: 0.4rem 0.7rem; border-radius: var(--radius-sm); text-decoration: none; transition: background-color 0.15s, color 0.15s; } .ds-nav a:hover { background-color: hsl(var(--surface-2)); color: hsl(var(--text-1)); } .ds-nav a.is-active { background-color: hsl(var(--accent) / 0.15); color: hsl(var(--accent-text)); }"
+    },
+    {
+      "name": "Pipeline Stage",
+      "kind": "custom",
+      "description": "The console's signature control: one lifecycle stage with its status pip, count, and share of the pipeline. Selecting it lenses the view without changing any count.",
+      "html": "<button class=\"ds-stage is-sel\" aria-pressed=\"true\"><i class=\"ds-stage-pip\"></i><span class=\"ds-stage-name\">Under Review</span><b class=\"ds-stage-count\">14</b><span class=\"ds-stage-bar\"><span style=\"width:38%\"></span></span></button>",
+      "css": ".ds-stage { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 9px; border-radius: var(--radius-sm); border: 1px solid hsl(var(--line) / var(--line-strong-alpha)); background-color: hsl(var(--surface-2) / 0.6); color: hsl(var(--text-1)); font: inherit; text-align: left; cursor: pointer; transition: border-color 0.15s, background-color 0.15s, padding-bottom 0.15s; } .ds-stage:hover { border-color: hsl(var(--accent) / 0.5); background-color: hsl(var(--surface-2)); } .ds-stage:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 2px; } .ds-stage.is-sel { border-color: hsl(var(--accent)); background-color: hsl(var(--accent) / 0.16); padding-bottom: 13px; } .ds-stage-pip { position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background-color: hsl(var(--status-under_review)); } .ds-stage-name { font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: hsl(var(--text-3)); } .ds-stage.is-sel .ds-stage-name { color: hsl(var(--accent-text)); } .ds-stage-count { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; } .ds-stage-bar { display: block; height: 4px; margin-top: 3px; border-radius: 999px; background-color: hsl(var(--line) / var(--line-alpha)); overflow: hidden; } .ds-stage-bar span { display: block; height: 100%; border-radius: 999px; background-color: hsl(var(--status-under_review)); }"
+    },
+    {
+      "name": "Situation Strip",
+      "kind": "custom",
+      "description": "The one-line operational readout every official surface opens with. Instrumentation, not a hero.",
+      "html": "<div class=\"ds-sit\" role=\"status\"><span><i style=\"background: hsl(var(--level-moderate))\"></i><b>38</b> pending</span><span><i style=\"background: hsl(var(--level-severe))\"></i><b>2</b> waiting over 7 days</span><span><i style=\"background: hsl(var(--level-severe))\"></i><b>14</b> reports with fatalities in 2026</span></div>",
+      "css": ".ds-sit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; padding: 0.5rem 1rem; border-radius: var(--radius-sm); border: 1px solid hsl(var(--line) / var(--line-strong-alpha)); background-color: hsl(var(--surface-1) / 0.66); backdrop-filter: blur(18px) saturate(150%); box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha)); font-size: 0.8125rem; color: hsl(var(--text-2)); } .ds-sit span { display: inline-flex; align-items: center; } .ds-sit i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; } .ds-sit b { margin-right: 4px; color: hsl(var(--text-1)); font-weight: 700; font-variant-numeric: tabular-nums; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Incident Console",
+    "overview": "The system is one instrument panel seen through frosted glass. Every official surface — the operations map, the admin analytics console, the reports and notifications tabs — is the same command centre at a different zoom, so an admin moving between them is panning one console rather than loading another product. Dark is the default state of that room; the light theme is the same room with the lamps on, not a second design.\n\nDensity is instrumental, never decorative. A reading is a large tabular number with a small caption under it; a panel answers exactly one question; colour is spent only where it carries meaning (the eight status hues, the severity ramp, the up/down of a year-over-year delta). Everything else is neutral surface, hairline, and text weight. Rank comes from scale, not from hue.\n\nThe material is frosted glass on a faint accent and violet glow: a translucent panel fill, a backdrop blur, a hairline border, and a single inset highlight along the top edge. Depth is entirely this stack — there is no skeuomorphic lift, and the glow is the only ornament the system allows itself.",
+    "keyCharacteristics": [
+      "One grammar for every official surface: situation line, title row, readings, then the work panel.",
+      "Frosted translucent panels over a faint accent/violet glow; hairline borders and an inset top highlight in place of heavy shadows.",
+      "Tabular figures and monospace report references; numbers are the content.",
+      "The status and severity ramp is the only saturated colour; nothing else is tinted for decoration.",
+      "Dark-first. The light theme is a variant of the same tokens, not a separate palette."
+    ],
+    "rules": [
+      { "name": "The Meaning-Only Colour Rule", "body": "A saturated hue appears only when it encodes something: a status, a severity, a delta direction, or the single interactive accent. Decorative tint is a defect.", "section": "colors" },
+      { "name": "The Blend-Don't-Bleed Rule", "body": "Text on a tinted fill is the hue blended 75% toward the theme's own text colour, never the raw hue. The raw severity hue only reaches about 4.2:1 against its own tint, which fails AA at badge and alert sizes.", "section": "colors" },
+      { "name": "The Numbers-Are-the-Voice Rule", "body": "Emphasis is scale plus tabular figures, never a display face, gradient, or colour.", "section": "typography" },
+      { "name": "The Measured-Mono Rule", "body": "Monospace is reserved for identifiers and measurements — report references, coordinates, values that must align. It is not a costume for \"technical\".", "section": "typography" },
+      { "name": "The One Material Rule", "body": "Glass is the system's only elevation device. Panels are never nested — a panel inside a panel doubles the border and the highlight and reads as a mistake; use the panel's own hairline dividers or a plain column instead.", "section": "elevation" },
+      { "name": "The Glow-Stays-Behind Rule", "body": "The accent/violet wash is painted behind the glass, never on it, and it never brightens into a decorative wash on a light ground.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do give a floating surface all four glass properties together: translucent fill, backdrop blur, hairline border, inset top highlight.",
+      "Do set every figure in `font-variant-numeric: tabular-nums` and read rank from scale.",
+      "Do blend tinted text 75% toward the theme text colour and keep the raw hue for the dot or bar instead.",
+      "Do keep both themes driven from the one token set in `client/src/index.css`, and check a new surface in light as well as dark.",
+      "Do state the counting rules next to analytics that depend on them, and label sample data as sample.",
+      "Do theme the browser's own surfaces (selection, caret, scrollbars, focus ring) from the same tokens."
+    ],
+    "donts": [
+      "Don't nest a panel inside a panel; the doubled border and highlight read as an error.",
+      "Don't tint anything decoratively; a saturated hue means a status, severity, delta, or the one accent.",
+      "Don't use emoji or Unicode glyphs as icons; draw the SVG at one stroke weight.",
+      "Don't add a label above a heading to explain it, and don't put a hard offset shadow on anything.",
+      "Don't let status or severity ride on colour alone.",
+      "Don't animate anything without the matching `prefers-reduced-motion` guard."
+    ]
+  }
+}

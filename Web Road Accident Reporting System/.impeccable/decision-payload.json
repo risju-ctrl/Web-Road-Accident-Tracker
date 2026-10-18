@@ -1,0 +1,129 @@
+{
+  "title": "Choose the dashboard structure",
+  "question": "The roll dealt three structures for the admin analytics dashboard, all inside the app's existing design system. Lock one, steer, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "kind": "assigned",
+      "label": "The Pipeline Board",
+      "kicker": "THE ROLL",
+      "lineage": "operations status boards (production kanban analytics)",
+      "thesis": "The eight-stage report lifecycle is the page's spine: one full-width rail of stages with counts and waiting times, and every other widget scopes to the stage you point at.",
+      "palette": ["#2A6BF2", "#0D141C", "#131B25", "#EDF2F7", "#22D38F", "#FFD231", "#F44040"],
+      "materials": ["translucent glass panels", "hairline rules", "tabular numerals"],
+      "viewport": "Title and filters, then the stage rail (Submitted 22, Under Review 14, Needs Info 5, Verified 40, Assigned 18, In Progress 26, Resolved 70, Rejected 9) with per-stage waiting times, then map + charts, with the aging queue above the fold.",
+      "risk": "A crowded rail can out-shout the queue if wide stage labels win the row.",
+      "raised": [
+        { "from": "orienteering map", "raise": "Pin-to-row registration: every map pin pairs with a ranked row, and filters scope views without ever rewriting the counts." },
+        { "from": "airport signage", "raise": "One question per panel with one number, and waiting time reads as \"3 d\", never as a date." },
+        { "from": "acetate tab manual", "raise": "Stage tabs step in visual weight by how many reports they hold; the selected stage extends." },
+        { "from": "jet-age ticket wallet", "raise": "Rejected never disappears: it stays on the rail as the cancelled stage." },
+        { "from": "design annual plate section", "raise": "One registration grid: every panel edge snaps to the same hairline baseline." },
+        { "from": "variable font specimen", "raise": "Hierarchy by scale alone: the number carries rank, colour only carries meaning." }
+      ],
+      "html": ".impeccable/mocks/decision/assigned.html"
+    },
+    {
+      "id": "dealt-hotspot",
+      "kind": "dealt",
+      "label": "The Hotspot Board",
+      "lineage": "cartographic ranked-list analytics",
+      "thesis": "Where it happens leads: a ranked hotspot table paired with the map owns the first screen, and type, injury and vehicle charts scope to the selected hotspot.",
+      "palette": ["#2A6BF2", "#0D141C", "#131B25", "#EDF2F7", "#22D38F", "#FFD231", "#F44040"],
+      "materials": ["translucent glass panels", "hairline rules", "tabular numerals"],
+      "viewport": "Status-coloured map left, ranked location rows right with counts and trend deltas; KPI strip above, accident-type and injury charts below the fold.",
+      "risk": "When reports scatter instead of clustering, the ranking has little to say."
+    },
+    {
+      "id": "dealt-queue",
+      "kind": "dealt",
+      "label": "The Triage Queue",
+      "lineage": "support-desk SLA queue boards",
+      "thesis": "What needs me leads: the aging queue with days-waiting counters owns the top of the screen, and all analytics sit underneath it.",
+      "palette": ["#2A6BF2", "#0D141C", "#131B25", "#EDF2F7", "#22D38F", "#FFD231", "#F44040"],
+      "materials": ["translucent glass panels", "hairline rules", "tabular numerals"],
+      "viewport": "Compact KPI strip, then the queue table (reference, title, category, location, status badge, days waiting, oldest first) filling the first screen; charts below the fold.",
+      "risk": "Trend and pattern questions all fall below the fold; the screen answers \"what now\" but not \"what changed\"."
+    },
+    {
+      "id": "challenger-orienteering",
+      "kind": "challenger",
+      "catalogId": "notation-diagram-systems-orienteering-map",
+      "label": "Orienteering Map",
+      "verdict": "declined",
+      "thesis": "Fixed colour terrain beneath a course layer that rides above it.",
+      "palette": ["#F4F1E4", "#6B4F1E", "#7B3FA0", "#2E7D32"],
+      "materials": ["isom inks", "contour texture"],
+      "viewport": "Map with a numbered course overlay and a ranked control-description table.",
+      "risk": "Its paper map world clashes with the app's dark glass system.",
+      "kept": "Pin-to-row registration: the filter layer never edits the base counts."
+    },
+    {
+      "id": "challenger-signage",
+      "kind": "challenger",
+      "catalogId": "wayfinding-cartography-signage-terminal-yellow-wayfinding",
+      "label": "Terminal Wayfinding",
+      "verdict": "declined",
+      "thesis": "One message per band, distances in minutes, arrows locked to the panel edge.",
+      "palette": ["#FFD400", "#101010", "#FFFFFF"],
+      "materials": ["saturated sign panels", "pictograms"],
+      "viewport": "Yellow decision bands sequencing the queue like concourse signage.",
+      "risk": "A saturated yellow ground would override the product's identity rather than lend to it.",
+      "kept": "One question per panel, one number, waiting time in durations."
+    },
+    {
+      "id": "challenger-tabboard",
+      "kind": "challenger",
+      "catalogId": "rw-manual-acetate-tab-board",
+      "label": "Acetate Tab Board",
+      "verdict": "declined",
+      "thesis": "A manual opened at the current section, extent drawn as a stepped tab rail.",
+      "palette": ["#F2EFE6", "#D96B27", "#1B1A17"],
+      "materials": ["milk acetate", "board stock"],
+      "viewport": "Section tabs down the edge; the selected leaf extends over the board.",
+      "risk": "A print-and-acetate material world fights the app's screen-native glass.",
+      "kept": "The stepped tab rail: stage weight by extent, selected stage extends."
+    },
+    {
+      "id": "challenger-wallet",
+      "kind": "challenger",
+      "catalogId": "vernacular-ephemera-jet-age-ticket-wallet",
+      "label": "Jet-Age Ticket Wallet",
+      "verdict": "declined",
+      "thesis": "Carbon-copy coupons choreograph one journey; nothing disappears, it cancels.",
+      "palette": ["#12284B", "#C8102E", "#F5F2EA", "#5B3A8C"],
+      "materials": ["coupon stock", "carbon purple"],
+      "viewport": "Per-report coupon legs through the lifecycle with a VOID stamp on rejection.",
+      "risk": "A per-report paper flow suits the reporter's tracking screen, not staff analytics.",
+      "kept": "Rejected stays visible as a cancelled record, never removed."
+    },
+    {
+      "id": "challenger-annual",
+      "kind": "challenger",
+      "catalogId": "design-annual-s-plate-section",
+      "label": "Design Annual Plate Section",
+      "verdict": "declined",
+      "thesis": "One uncoated sheet registered by crosshairs, hairlines, and a single stamp.",
+      "palette": ["#F5F4F6", "#16181A", "#DCDDF3", "#C9C7C4"],
+      "materials": ["uncoated stock", "hairline rules"],
+      "viewport": "Printed-sheet grid of plates with mono captions.",
+      "risk": "Editorial print calm loses the urgency a triage screen needs; light-only ground breaks the dark theme.",
+      "kept": "Registration precision: one hairline baseline grid behind every panel edge."
+    },
+    {
+      "id": "challenger-specimen",
+      "kind": "challenger",
+      "catalogId": "variable-font-specimen",
+      "label": "Variable Font Specimen",
+      "verdict": "declined",
+      "thesis": "One giant glyph driven live by axis sliders.",
+      "palette": ["#FAFAF8", "#111111", "#E8482C"],
+      "materials": ["paper", "ink"],
+      "viewport": "Type specimen with axis controls; a glyph grid breathes in step.",
+      "risk": "A type showcase has no task overlap with accident analytics.",
+      "kept": "Hierarchy by scale contrast alone; rank is size, not colour."
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "steer": true
+}

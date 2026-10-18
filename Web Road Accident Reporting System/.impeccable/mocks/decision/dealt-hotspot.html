@@ -1,0 +1,130 @@
+<!doctype html>
+<!-- Decision sketch: The Hotspot Board (dealt structure). 1440x900 first viewport, app dark theme. -->
+<html lang="en"><head><meta charset="utf-8"><title>Hotspot Board — decision sketch</title>
+<style>
+  :root{--s0:#090e14;--s1:#0d141c;--s2:#131b25;--line:rgba(255,255,255,.10);
+        --line2:rgba(255,255,255,.18);--t1:#edf2f7;--t2:#b0bec9;--t3:#788795;
+        --acc:#2a6bf2;--green:#22d38f;--amber:#ffd231;--red:#f44040;--violet:#a184ff;--teal:#19bf97;--orange:#fa8c2e}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1440px;height:900px;overflow:hidden;background:var(--s0);color:var(--t1);
+       font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px 20px}
+  .num{font-variant-numeric:tabular-nums}
+  .panel{background:var(--s1);border:1px solid var(--line2);border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px}
+  h1{font-size:19px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--t3);font-size:12.5px;margin-top:2px}
+  .filters{display:flex;gap:8px}
+  .f{background:var(--s2);border:1px solid var(--line2);border-radius:7px;padding:6px 10px;font-size:12.5px;color:var(--t2)}
+  .f b{color:var(--t1);font-weight:600}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
+  .kpi{padding:9px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .kpi .v{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  .kpi .l{font-size:12px;color:var(--t3)}
+  .kpi .d{font-size:12px}
+  .up{color:var(--green)}.dn{color:var(--red)}
+  /* body: big map left, ranked hotspot rows right */
+  .body{display:grid;grid-template-columns:1.35fr 1fr;gap:12px}
+  .ph{font-size:13px;font-weight:700;color:#8db2ff;margin:0 0 8px}
+  .map{height:494px;position:relative;overflow:hidden;border:1px solid var(--line2);border-radius:9px;background:#0b1119}
+  .map:before,.map:after{content:"";position:absolute;background:rgba(255,255,255,.05)}
+  .map:before{left:0;right:0;top:44%;height:11px;transform:rotate(-2deg)}
+  .map:after{top:0;bottom:0;left:52%;width:13px;transform:rotate(3deg)}
+  .pin{position:absolute;border-radius:50%;border:2px solid rgba(9,14,20,.85)}
+  .ring{position:absolute;border-radius:50%;border:1.5px solid rgba(244,64,64,.75);background:rgba(244,64,64,.14)}
+  .maplg{position:absolute;left:10px;bottom:10px;display:flex;gap:12px;font-size:11.5px;color:var(--t3);
+         background:rgba(13,20,28,.85);border:1px solid var(--line2);border-radius:7px;padding:5px 10px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+  /* ranked rows */
+  .rows{padding:10px 12px}
+  .row{display:grid;grid-template-columns:22px 1fr 54px 66px;gap:10px;align-items:center;
+       padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px}
+  .row .rk{color:var(--t3);font-size:12px;text-align:right}
+  .row .nm{font-weight:600}
+  .row .brg{display:block;font-size:11.5px;color:var(--t3);font-weight:400}
+  .row .ct{font-size:16px;font-weight:700;text-align:right}
+  .row .dl{font-size:12px;text-align:right}
+  .row.sel{background:rgba(42,107,242,.12);border:1px solid var(--acc);border-radius:8px}
+  .bar{height:5px;border-radius:99px;background:rgba(255,255,255,.08);margin-top:5px;overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--red)}
+  .rowhd{display:grid;grid-template-columns:22px 1fr 54px 66px;gap:10px;padding:0 8px 6px;
+         font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)}
+  .note{font-size:12px;color:var(--t3);padding:8px 8px 2px}
+  /* below the fold strip */
+  .below{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px}
+  .mini{padding:10px 12px}
+  .bars{display:grid;grid-template-columns:128px 1fr 32px;gap:8px;align-items:center;font-size:12.5px;margin-bottom:6px}
+  .bars .l{color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden}
+  .tr{height:12px;border-radius:0 4px 4px 0;background:var(--red)}
+</style></head>
+<body>
+  <div class="hd">
+    <div><h1>Road Accident Reporting: Analytics</h1>
+      <div class="sub">Public reports are not official until verified. Showing verified reports of 2026, ranked by barangay.</div></div>
+    <div class="filters">
+      <div class="f">Year <b>2026</b></div><div class="f">vs <b>2025</b></div>
+      <div class="f">Scope <b>Verified only</b></div><div class="f">Type <b>All</b></div>
+      <div class="f">Location <b>Any</b></div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi panel"><div><div class="v num">240</div><div class="l">Total Submitted</div></div><div class="d up num">+10.1%</div></div>
+    <div class="kpi panel"><div><div class="v num">38</div><div class="l">Pending</div></div><div class="d up num">+6.6%</div></div>
+    <div class="kpi panel"><div><div class="v num">150</div><div class="l">Verified (official)</div></div><div class="d dn num">−4.5%</div></div>
+    <div class="kpi panel"><div><div class="v num">70</div><div class="l">Resolved / Closed</div></div><div class="d up num">+12.9%</div></div>
+    <div class="kpi panel"><div><div class="v num">14</div><div class="l">Reports with Fatalities</div></div><div class="d dn num">+7.7%</div></div>
+  </div>
+
+  <div class="body">
+    <div class="panel" style="padding:10px 12px">
+      <h2 class="ph">Report locations · 74 verified on map</h2>
+      <div class="map">
+        <span class="ring" style="left:16%;top:22%;width:74px;height:74px"></span>
+        <span class="ring" style="left:58%;top:52%;width:58px;height:58px"></span>
+        <span class="pin" style="left:19%;top:26%;width:13px;height:13px;background:var(--teal)"></span>
+        <span class="pin" style="left:24%;top:33%;width:11px;height:11px;background:var(--teal)"></span>
+        <span class="pin" style="left:15%;top:36%;width:11px;height:11px;background:var(--red)"></span>
+        <span class="pin" style="left:29%;top:24%;width:10px;height:10px;background:var(--teal)"></span>
+        <span class="pin" style="left:61%;top:56%;width:13px;height:13px;background:var(--red)"></span>
+        <span class="pin" style="left:66%;top:62%;width:11px;height:11px;background:var(--teal)"></span>
+        <span class="pin" style="left:44%;top:44%;width:10px;height:10px;background:var(--amber)"></span>
+        <span class="pin" style="left:78%;top:31%;width:10px;height:10px;background:var(--teal)"></span>
+        <span class="pin" style="left:86%;top:58%;width:10px;height:10px;background:var(--violet)"></span>
+        <div class="maplg"><span><span class="dot" style="background:var(--teal)"></span>Verified</span>
+          <span><span class="dot" style="background:var(--amber)"></span>Pending review</span>
+          <span><span class="dot" style="background:var(--red)"></span>Fatalities recorded</span></div>
+      </div>
+    </div>
+    <div class="panel rows">
+      <h2 class="ph">Hotspots · reports per barangay</h2>
+      <div class="rowhd"><span>#</span><span>Barangay</span><span style="text-align:right">Reports</span><span style="text-align:right">vs 2025</span></div>
+      <div class="row sel"><span class="rk num">1</span><span class="nm">Brgy. Sample 1<span class="brg">Market Road corridor · 3 fatality reports</span><span class="bar"><span style="width:100%"></span></span></span><span class="ct num">23</span><span class="dl dn num">+35%</span></div>
+      <div class="row"><span class="rk num">2</span><span class="nm">Brgy. Sample 2<span class="brg">Bridge approach · 2 fatality reports</span><span class="bar"><span style="width:78%"></span></span></span><span class="ct num">18</span><span class="dl dn num">+12%</span></div>
+      <div class="row"><span class="rk num">3</span><span class="nm">Brgy. Sample 3<span class="brg">National highway junction</span><span class="bar"><span style="width:61%"></span></span></span><span class="ct num">14</span><span class="dl up num">−8%</span></div>
+      <div class="row"><span class="rk num">4</span><span class="nm">Brgy. Sample 4<span class="brg">School zone, 7–8 AM peak</span><span class="bar"><span style="width:43%"></span></span></span><span class="ct num">10</span><span class="dl up num">−2%</span></div>
+      <div class="row"><span class="rk num">5</span><span class="nm">Brgy. Sample 5<span class="brg">Coastal road curve</span><span class="bar"><span style="width:30%"></span></span></span><span class="ct num">7</span><span class="dl dn num">+16%</span></div>
+      <div class="note">Selecting a row scopes the map, type, injury and vehicle panels to that barangay. Counts never change with the filter — the scope line names what is shown.</div>
+    </div>
+  </div>
+
+  <div class="below">
+    <div class="panel mini"><h2 class="ph">Accident Type · Brgy. Sample 1</h2>
+      <div class="bars"><span class="l">Vehicle Collision</span><span class="tr" style="width:92%"></span><span class="num">11</span></div>
+      <div class="bars"><span class="l">Motorcycle Accident</span><span class="tr" style="width:58%"></span><span class="num">7</span></div>
+      <div class="bars"><span class="l">Hit and Run</span><span class="tr" style="width:25%"></span><span class="num">3</span></div>
+      <div class="bars"><span class="l">Pedestrian Accident</span><span class="tr" style="width:17%"></span><span class="num">2</span></div>
+    </div>
+    <div class="panel mini"><h2 class="ph">Injury Level · Brgy. Sample 1</h2>
+      <div class="bars"><span class="l">None</span><span class="tr" style="width:65%;background:var(--green)"></span><span class="num">9</span></div>
+      <div class="bars"><span class="l">Injuries</span><span class="tr" style="width:50%;background:var(--amber)"></span><span class="num">7</span></div>
+      <div class="bars"><span class="l">Fatalities</span><span class="tr" style="width:21%"></span><span class="num">3</span></div>
+      <div class="bars"><span class="l">Unknown</span><span class="tr" style="width:14%;background:var(--t3)"></span><span class="num">2</span></div>
+    </div>
+    <div class="panel mini"><h2 class="ph">Vehicle Type · Brgy. Sample 1</h2>
+      <div class="bars"><span class="l">Motorcycle</span><span class="tr" style="width:100%;background:var(--violet)"></span><span class="num">9</span></div>
+      <div class="bars"><span class="l">Car</span><span class="tr" style="width:66%;background:var(--violet)"></span><span class="num">6</span></div>
+      <div class="bars"><span class="l">Tricycle</span><span class="tr" style="width:33%;background:var(--violet)"></span><span class="num">3</span></div>
+      <div class="bars"><span class="l">Truck</span><span class="tr" style="width:11%;background:var(--violet)"></span><span class="num">1</span></div>
+    </div>
+  </div>
+</body></html>

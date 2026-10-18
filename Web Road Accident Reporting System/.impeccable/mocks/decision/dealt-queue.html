@@ -1,0 +1,118 @@
+<!doctype html>
+<!-- Decision sketch: The Triage Queue (dealt structure). 1440x900 first viewport, app dark theme. -->
+<html lang="en"><head><meta charset="utf-8"><title>Triage Queue — decision sketch</title>
+<style>
+  :root{--s0:#090e14;--s1:#0d141c;--s2:#131b25;--line:rgba(255,255,255,.10);
+        --line2:rgba(255,255,255,.18);--t1:#edf2f7;--t2:#b0bec9;--t3:#788795;
+        --acc:#2a6bf2;--green:#22d38f;--amber:#ffd231;--red:#f44040;--violet:#a184ff;--teal:#19bf97;--orange:#fa8c2e}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1440px;height:900px;overflow:hidden;background:var(--s0);color:var(--t1);
+       font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px 20px}
+  .num{font-variant-numeric:tabular-nums}
+  .panel{background:var(--s1);border:1px solid var(--line2);border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px}
+  h1{font-size:19px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--t3);font-size:12.5px;margin-top:2px}
+  .filters{display:flex;gap:8px}
+  .f{background:var(--s2);border:1px solid var(--line2);border-radius:7px;padding:6px 10px;font-size:12.5px;color:var(--t2)}
+  .f b{color:var(--t1);font-weight:600}
+  /* one dense KPI strip, compact */
+  .kpis{display:flex;gap:0;margin-bottom:10px;padding:8px 4px;align-items:center}
+  .kpi{flex:1;padding:2px 14px;border-right:1px solid var(--line)}
+  .kpi:last-child{border-right:0}
+  .kpi .v{font-size:22px;font-weight:700;letter-spacing:-.02em}
+  .kpi .l{font-size:11.5px;color:var(--t3)}
+  .kpi .d{font-size:11.5px;margin-left:6px}
+  .up{color:var(--green)}.dn{color:var(--red)}
+  .crit{margin-left:auto;display:flex;align-items:center;gap:8px;padding:5px 12px;margin-right:4px;
+        background:rgba(244,64,64,.13);border:1px solid rgba(244,64,64,.45);border-radius:8px;font-size:12.5px}
+  .crit .b{width:9px;height:9px;border-radius:50%;background:var(--red)}
+  /* queue */
+  .queue{padding:10px 12px}
+  .qhd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .qhd h2{font-size:13px;color:#8db2ff}
+  .seg{display:flex;gap:4px}
+  .seg span{padding:4px 11px;border:1px solid var(--line2);border-radius:7px;font-size:12px;color:var(--t2);background:var(--s2)}
+  .seg span.on{background:rgba(42,107,242,.2);border-color:var(--acc);color:#8db2ff}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);text-align:left;
+     padding:6px 10px;border-bottom:1px solid var(--line2);white-space:nowrap}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);color:var(--t2);vertical-align:middle}
+  .ref{color:var(--t3);font:11.5px ui-monospace,Consolas,monospace}
+  td b{color:var(--t1);font-weight:600}
+  .badge{display:inline-block;padding:1px 9px;border-radius:99px;font-size:11px;border:1px solid;white-space:nowrap}
+  .b-sub{color:#b0bec9;border-color:rgba(176,190,201,.4);background:rgba(176,190,201,.12)}
+  .b-rev{color:#ffeb9e;border-color:rgba(255,210,49,.4);background:rgba(255,210,49,.12)}
+  .b-cli{color:#ffc48f;border-color:rgba(250,140,46,.4);background:rgba(250,140,46,.12)}
+  .wait{text-align:right;font-weight:700;color:var(--t1)}
+  .wait.hot{color:#ffeb9e}
+  .wait.crit{color:#ff8f8f}
+  tr.over7{background:rgba(244,64,64,.07)}
+  .act{color:#8db2ff;font-size:12.5px;white-space:nowrap}
+  /* what peeks below the fold */
+  .below{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-top:12px}
+  .mini{padding:10px 12px}
+  .ph{font-size:13px;font-weight:700;color:#8db2ff;margin:0 0 8px}
+  .spark{height:56px;position:relative;border-bottom:1px solid var(--line)}
+  .spark svg{position:absolute;inset:0;width:100%;height:100%}
+  .lgs{display:flex;gap:14px;font-size:12px;color:var(--t3);margin-top:8px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+</style></head>
+<body>
+  <div class="hd">
+    <div><h1>Road Accident Reporting: Analytics</h1>
+      <div class="sub">Public reports are not official until verified. The queue is the work; everything below it is context.</div></div>
+    <div class="filters">
+      <div class="f">Year <b>2026</b></div><div class="f">vs <b>2025</b></div>
+      <div class="f">Scope <b>Verified only</b></div><div class="f">Location <b>Any</b></div>
+    </div>
+  </div>
+
+  <div class="kpis panel">
+    <div class="kpi"><span class="v num">240</span><span class="l">Submitted</span><span class="d up num">+10.1%</span></div>
+    <div class="kpi"><span class="v num">38</span><span class="l">Pending</span><span class="d up num">+6.6%</span></div>
+    <div class="kpi"><span class="v num">150</span><span class="l">Verified</span><span class="d dn num">−4.5%</span></div>
+    <div class="kpi"><span class="v num">70</span><span class="l">Resolved</span><span class="d up num">+12.9%</span></div>
+    <div class="kpi"><span class="v num">14</span><span class="l">With fatalities</span><span class="d dn num">+7.7%</span></div>
+    <div class="crit"><span class="b"></span><b class="num">2</b> reports waiting over 7 days</div>
+  </div>
+
+  <div class="panel queue">
+    <div class="qhd"><h2>Waiting on staff · oldest first</h2>
+      <div class="seg"><span class="on">Needs action (41)</span><span>Clarification (5)</span><span>All pending (38)</span></div></div>
+    <table>
+      <tr><th>Reference</th><th>Title</th><th>Category</th><th>Location</th><th>Status</th><th>Submitted</th><th style="text-align:right">Waiting</th><th></th></tr>
+      <tr class="over7"><td><span class="ref">RA-2026-000010</span></td><td><b>Two vehicles collide at bridge approach</b></td><td>Vehicle Collision</td><td>Brgy. Sample 1</td><td><span class="badge b-sub">submitted</span></td><td>Oct 8, 2026</td><td class="wait crit num">9 d</td><td class="act">Verify →</td></tr>
+      <tr class="over7"><td><span class="ref">RA-2026-000011</span></td><td><b>Motorcycle hit, rider fled scene</b></td><td>Hit and Run</td><td>Brgy. Sample 2</td><td><span class="badge b-rev">under review</span></td><td>Oct 10, 2026</td><td class="wait hot num">7 d</td><td class="act">Verify →</td></tr>
+      <tr><td><span class="ref">RA-2026-000012</span></td><td><b>Tricycle rollover near market road</b></td><td>Motorcycle Accident</td><td>Brgy. Sample 3</td><td><span class="badge b-cli">needs clarification</span></td><td>Oct 12, 2026</td><td class="wait num">5 d</td><td class="act">Open →</td></tr>
+      <tr><td><span class="ref">RA-2026-000013</span></td><td><b>Pedestrian struck in school zone</b></td><td>Pedestrian Accident</td><td>Brgy. Sample 4</td><td><span class="badge b-sub">submitted</span></td><td>Oct 14, 2026</td><td class="wait num">3 d</td><td class="act">Verify →</td></tr>
+      <tr><td><span class="ref">RA-2026-000014</span></td><td><b>Bus rear-ended at coastal road curve</b></td><td>Vehicle Collision</td><td>Brgy. Sample 5</td><td><span class="badge b-sub">submitted</span></td><td>Oct 15, 2026</td><td class="wait num">2 d</td><td class="act">Verify →</td></tr>
+      <tr><td><span class="ref">RA-2026-000015</span></td><td><b>Motorcycle vs. tricycle at junction</b></td><td>Motorcycle Accident</td><td>Brgy. Sample 3</td><td><span class="badge b-rev">under review</span></td><td>Oct 15, 2026</td><td class="wait num">2 d</td><td class="act">Verify →</td></tr>
+      <tr><td><span class="ref">RA-2026-000016</span></td><td><b>Hit and run near fuel station</b></td><td>Hit and Run</td><td>Brgy. Sample 1</td><td><span class="badge b-cli">needs clarification</span></td><td>Oct 16, 2026</td><td class="wait num">1 d</td><td class="act">Open →</td></tr>
+    </table>
+  </div>
+
+  <div class="below">
+    <div class="panel mini"><h2 class="ph">Reports by Status · 2026 vs 2025</h2>
+      <div class="spark"><svg viewBox="0 0 600 56" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#2a6bf2" stroke-width="2.5" points="0,40 50,36 100,38 150,30 200,26 250,28 300,22 350,24 400,18 450,20 500,16 550,26 600,34"/>
+        <polyline fill="none" stroke="#788795" stroke-width="2" stroke-dasharray="5 4" points="0,44 50,42 100,43 150,38 200,36 250,37 300,33 350,34 400,30 450,31 500,28 550,36 600,42"/>
+      </svg></div>
+      <div class="lgs"><span><span class="dot" style="background:var(--acc)"></span>2026</span>
+        <span><span class="dot" style="background:var(--t3)"></span>2025 (compare)</span>
+        <span>Peak month: <b>May 2026 · 22 reports</b></span></div>
+    </div>
+    <div class="panel mini"><h2 class="ph">Pipeline · where reports stall</h2>
+      <div class="lgs" style="flex-wrap:wrap;gap:10px 16px">
+        <span><span class="dot" style="background:#b0bec9"></span>Submitted <b class="num">22</b></span>
+        <span><span class="dot" style="background:var(--acc)"></span>Under Review <b class="num">14</b></span>
+        <span><span class="dot" style="background:var(--orange)"></span>Needs Info <b class="num">5</b></span>
+        <span><span class="dot" style="background:var(--teal)"></span>Verified <b class="num">40</b></span>
+        <span><span class="dot" style="background:var(--violet)"></span>Assigned <b class="num">18</b></span>
+        <span><span class="dot" style="background:var(--acc)"></span>In Progress <b class="num">26</b></span>
+        <span><span class="dot" style="background:var(--green)"></span>Resolved <b class="num">70</b></span>
+        <span><span class="dot" style="background:var(--red)"></span>Rejected <b class="num">9</b></span>
+      </div>
+    </div>
+  </div>
+</body></html>

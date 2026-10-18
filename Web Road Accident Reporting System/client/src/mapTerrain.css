@@ -1,0 +1,9 @@
+/* Terrain style: shaded relief blended into the dark basemap.
+   Overlay keeps flat ground untouched and lets slopes lighten (sun side) and
+   darken (shadow side), which reads as hills and mountains.
+   If the relief looks too strong or too faint, change the opacity below. */
+.rw-hillshade {
+  mix-blend-mode: overlay;
+  opacity: 0.85;
+  filter: contrast(1.35);
+}

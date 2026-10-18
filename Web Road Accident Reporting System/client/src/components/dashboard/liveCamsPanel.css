@@ -1,0 +1,62 @@
+/* Uses currentColor and translucent fills so it follows the dashboard theme. */
+
+/* Span the full dashboard width like the other panels. */
+.ad-cams { grid-column: 1 / -1; width: 100%; max-width: none; align-self: stretch; box-sizing: border-box; }
+
+.lc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1.25rem 1rem; }
+.lc-card { min-width: 0; }
+
+.lc-media {
+  position: relative; display: block; width: 100%; aspect-ratio: 16 / 9;
+  border-radius: 12px; overflow: hidden; padding: 0; border: 0; cursor: pointer;
+  background: rgba(127,127,127,.18); color: inherit; font: inherit; isolation: isolate;
+}
+.lc-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Player drawn 180% size and centred so the top title bar and bottom logo strip fall outside the card. */
+.lc-live {
+  position: absolute; left: -40%; top: -40%; width: 180%; height: 180%;
+  border: 0; pointer-events: none; opacity: 0; transition: opacity .4s ease;
+}
+.lc-live.is-ready { opacity: 1; }
+
+.lc-badge, .lc-where {
+  position: absolute; z-index: 1; font-size: .75rem; line-height: 1; border-radius: 4px; padding: .3rem .45rem;
+}
+.lc-badge { top: .5rem; left: .5rem; background: #d92d20; color: #fff; font-weight: 700; }
+.lc-where { left: .5rem; bottom: .5rem; max-width: calc(100% - 1rem); background: rgba(0,0,0,.65); color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.lc-meta { padding-top: .6rem; }
+.lc-title { margin: 0; font-size: .95rem; font-weight: 600; line-height: 1.3; }
+.lc-sub { margin: .15rem 0 0; font-size: .82rem; opacity: .7; }
+
+.lc-more { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(127,127,127,.25); }
+.lc-more-title { margin: 0; font-size: .9rem; font-weight: 600; }
+.lc-more-note { margin: .15rem 0 .75rem; }
+.lc-more-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .75rem; }
+.lc-more-item {
+  display: flex; flex-direction: column; gap: .15rem; height: 100%; box-sizing: border-box;
+  padding: .75rem .9rem; border-radius: 10px; border: 1px solid rgba(127,127,127,.35);
+  color: inherit; text-decoration: none;
+}
+.lc-more-item:hover { background: rgba(127,127,127,.14); border-color: currentColor; }
+.lc-more-name { font-weight: 600; }
+.lc-more-cta { margin-top: .4rem; font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; }
+
+.lc-media:focus-visible, .lc-close:focus-visible, .lc-more-item:focus-visible, .lc-empty a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
+.lc-modal {
+  width: min(60rem, 92vw); padding: 1rem; border: 1px solid rgba(127,127,127,.35);
+  border-radius: 14px; background: #141414; color: #f2f2f2;
+}
+.lc-modal::backdrop { background: rgba(0,0,0,.7); }
+.lc-modal-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: .75rem; }
+.lc-close { font: inherit; color: inherit; background: transparent; border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: .3rem .9rem; cursor: pointer; }
+.lc-close:hover { background: rgba(255,255,255,.12); }
+.lc-modal-video { aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
+.lc-modal-video iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+.lc-empty p { margin: 0 0 .5rem; }
+.lc-links { margin: 0; padding-left: 1.2rem; }
+
+@media (prefers-reduced-motion: reduce) { .lc-live { transition: none; } }

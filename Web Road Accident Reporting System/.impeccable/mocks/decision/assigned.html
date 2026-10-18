@@ -1,0 +1,142 @@
+<!doctype html>
+<!-- Decision sketch: The Pipeline Board (dealt lead). 1440x900 first viewport, app dark theme. -->
+<html lang="en"><head><meta charset="utf-8"><title>Pipeline Board — decision sketch</title>
+<style>
+  :root{--s0:#090e14;--s1:#0d141c;--s2:#131b25;--s3:#1b242f;--line:rgba(255,255,255,.10);
+        --line2:rgba(255,255,255,.18);--t1:#edf2f7;--t2:#b0bec9;--t3:#788795;
+        --acc:#2a6bf2;--green:#22d38f;--amber:#ffd231;--red:#f44040;--violet:#a184ff;--teal:#19bf97;--orange:#fa8c2e}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1440px;height:900px;overflow:hidden;background:var(--s0);color:var(--t1);
+       font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px 20px}
+  .num{font-variant-numeric:tabular-nums}
+  .panel{background:var(--s1);border:1px solid var(--line2);border-radius:10px;
+         box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+  /* header */
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px}
+  h1{font-size:19px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--t3);font-size:12.5px;margin-top:2px}
+  .filters{display:flex;gap:8px;align-items:center}
+  .f{background:var(--s2);border:1px solid var(--line2);border-radius:7px;padding:6px 10px;font-size:12.5px;color:var(--t2)}
+  .f b{color:var(--t1);font-weight:600}
+  /* KPI readings */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
+  .kpi{padding:9px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .kpi .v{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  .kpi .l{font-size:12px;color:var(--t3)}
+  .kpi .d{font-size:12px}
+  .up{color:var(--green)}.dn{color:var(--red)}
+  /* stage rail */
+  .rail{display:grid;grid-template-columns:1.1fr 1.15fr 1.05fr 1fr 1fr 1.1fr 1.1fr .95fr;gap:8px;margin-bottom:12px}
+  .st{padding:9px 11px 10px;border:1px solid var(--line2);border-radius:9px;background:var(--s1);position:relative}
+  .st .n{font-size:11.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden}
+  .st .c{font-size:24px;font-weight:700;margin-top:1px}
+  .st .w{font-size:12px;color:var(--t2)}
+  .st.sel{border-color:var(--acc);background:rgba(42,107,242,.12);padding-bottom:16px}
+  .st.sel .c{color:#8db2ff}
+  .st.flag{border-color:rgba(255,210,49,.55)}
+  .st .pip{position:absolute;top:9px;right:10px;width:8px;height:8px;border-radius:50%}
+  .body{display:grid;grid-template-columns:1.45fr 1fr;gap:12px}
+  .ph{font-size:13px;font-weight:700;color:#8db2ff;margin:0 0 8px}
+  /* map */
+  .map{height:322px;position:relative;overflow:hidden;border:1px solid var(--line2);border-radius:9px;background:#0b1119}
+  .map:before,.map:after{content:"";position:absolute;background:rgba(255,255,255,.05)}
+  .map:before{left:0;right:0;top:38%;height:10px;transform:rotate(-3deg)}
+  .map:after{top:0;bottom:0;left:56%;width:12px;transform:rotate(4deg)}
+  .pin{position:absolute;width:11px;height:11px;border-radius:50%;border:2px solid rgba(9,14,20,.8)}
+  .lg{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--t3);align-items:center}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+  /* charts */
+  .bars{display:grid;grid-template-columns:118px 1fr 34px;gap:8px;align-items:center;font-size:12.5px;margin-bottom:7px}
+  .bars .l{color:var(--t2);text-align:right;white-space:nowrap;overflow:hidden}
+  .tr{height:13px;border-radius:0 4px 4px 0;background:var(--red)}
+  .charts .sep{border-top:1px solid var(--line);margin:10px 0}
+  /* queue */
+  .queue{margin-top:12px;padding:10px 12px 6px}
+  .qhd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .qhd h2{font-size:13px;color:#8db2ff}
+  .alert{font-size:12px;color:#ffeb9e;background:rgba(255,210,49,.12);border:1px solid rgba(255,210,49,.4);border-radius:6px;padding:3px 9px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  td{padding:7px 8px;border-bottom:1px solid var(--line);color:var(--t2)}
+  td .ref{color:var(--t3);font:11px ui-monospace,Consolas,monospace}
+  td b{color:var(--t1);font-weight:600}
+  .badge{display:inline-block;padding:1px 9px;border-radius:99px;font-size:11px;border:1px solid}
+  .b-sub{color:#b0bec9;border-color:rgba(176,190,201,.4);background:rgba(176,190,201,.12)}
+  .b-rev{color:#ffeb9e;border-color:rgba(255,210,49,.4);background:rgba(255,210,49,.12)}
+  .b-cli{color:#ffc48f;border-color:rgba(250,140,46,.4);background:rgba(250,140,46,.12)}
+  .wait{color:#ffeb9e;font-weight:700}
+</style></head>
+<body>
+  <div class="hd">
+    <div><h1>Road Accident Reporting: Analytics</h1>
+      <div class="sub">Public reports are not official until verified. All numbers staff act on are counted once, in the month submitted.</div></div>
+    <div class="filters">
+      <div class="f">Year <b>2026</b></div><div class="f">vs <b>2025</b></div>
+      <div class="f">Scope <b>Verified only</b></div><div class="f">Type <b>All</b></div>
+      <div class="f">Location <b>Any</b></div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi panel"><div><div class="v num">240</div><div class="l">Total Submitted</div></div><div class="d up num">+10.1%</div></div>
+    <div class="kpi panel"><div><div class="v num">38</div><div class="l">Pending</div></div><div class="d up num">+6.6%</div></div>
+    <div class="kpi panel"><div><div class="v num">150</div><div class="l">Verified (official)</div></div><div class="d dn num">−4.5%</div></div>
+    <div class="kpi panel"><div><div class="v num">70</div><div class="l">Resolved / Closed</div></div><div class="d up num">+12.9%</div></div>
+    <div class="kpi panel"><div><div class="v num">14</div><div class="l">Reports with Fatalities</div></div><div class="d dn num">+7.7%</div></div>
+  </div>
+
+  <div class="rail">
+    <div class="st"><span class="pip" style="background:#b0bec9"></span><div class="n">Submitted</div><div class="c num">22</div><div class="w num">oldest 9 d</div></div>
+    <div class="st sel"><span class="pip" style="background:var(--acc)"></span><div class="n">Under Review</div><div class="c num">14</div><div class="w num">oldest 7 d</div></div>
+    <div class="st flag"><span class="pip" style="background:var(--orange)"></span><div class="n">Needs Info</div><div class="c num">5</div><div class="w num">oldest 5 d</div></div>
+    <div class="st"><span class="pip" style="background:var(--teal)"></span><div class="n">Verified</div><div class="c num">40</div><div class="w num">oldest 4 d</div></div>
+    <div class="st"><span class="pip" style="background:var(--violet)"></span><div class="n">Assigned</div><div class="c num">18</div><div class="w num">oldest 3 d</div></div>
+    <div class="st"><span class="pip" style="background:var(--acc)"></span><div class="n">In Progress</div><div class="c num">26</div><div class="w num">oldest 6 d</div></div>
+    <div class="st"><span class="pip" style="background:var(--green)"></span><div class="n">Resolved</div><div class="c num">70</div><div class="w num">—</div></div>
+    <div class="st"><span class="pip" style="background:var(--red)"></span><div class="n">Rejected</div><div class="c num">9</div><div class="w num">—</div></div>
+  </div>
+
+  <div class="body">
+    <div class="panel" style="padding:10px 12px">
+      <h2 class="ph">Report locations · Under Review</h2>
+      <div class="map">
+        <span class="pin" style="left:22%;top:30%;background:var(--acc)"></span>
+        <span class="pin" style="left:31%;top:52%;background:var(--acc)"></span>
+        <span class="pin" style="left:44%;top:41%;background:var(--acc)"></span>
+        <span class="pin" style="left:58%;top:64%;background:var(--teal)"></span>
+        <span class="pin" style="left:66%;top:27%;background:var(--acc)"></span>
+        <span class="pin" style="left:74%;top:48%;background:var(--amber)"></span>
+        <span class="pin" style="left:83%;top:36%;background:var(--acc)"></span>
+      </div>
+      <div class="lg"><span><span class="dot" style="background:var(--acc)"></span>Under review</span>
+        <span><span class="dot" style="background:var(--teal)"></span>Verified</span>
+        <span><span class="dot" style="background:var(--amber)"></span>Waiting on reporter</span>
+        <span class="num">14 on map</span></div>
+    </div>
+    <div class="panel charts" style="padding:10px 12px">
+      <h2 class="ph">Reports by Accident Type</h2>
+      <div class="bars"><span class="l">Vehicle Collision</span><span class="tr" style="width:90%"></span><span class="num">90</span></div>
+      <div class="bars"><span class="l">Motorcycle Accident</span><span class="tr" style="width:60%"></span><span class="num">60</span></div>
+      <div class="bars"><span class="l">Hit and Run</span><span class="tr" style="width:25%"></span><span class="num">25</span></div>
+      <div class="bars"><span class="l">Pedestrian Accident</span><span class="tr" style="width:18%"></span><span class="num">18</span></div>
+      <div class="bars"><span class="l">Other</span><span class="tr" style="width:8%"></span><span class="num">8</span></div>
+      <div class="sep"></div>
+      <h2 class="ph">Injury Level</h2>
+      <div class="lg"><span><span class="dot" style="background:var(--green)"></span>None <b class="num">80</b></span>
+        <span><span class="dot" style="background:var(--amber)"></span>Injuries <b class="num">70</b></span>
+        <span><span class="dot" style="background:var(--red)"></span>Fatalities <b class="num">14</b></span>
+        <span><span class="dot" style="background:var(--t3)"></span>Unknown <b class="num">10</b></span></div>
+    </div>
+  </div>
+
+  <div class="panel queue">
+    <div class="qhd"><h2>Needs attention · oldest first</h2>
+      <span class="alert">2 reports have waited over 7 days</span></div>
+    <table>
+      <tr><th>Reference</th><th>Title</th><th>Category</th><th>Location</th><th>Status</th><th style="text-align:right">Waiting</th></tr>
+      <tr><td><span class="ref">RA-2026-000010</span></td><td><b>Two vehicles collide at bridge approach</b></td><td>Vehicle Collision</td><td>Brgy. Sample 1</td><td><span class="badge b-sub">submitted</span></td><td style="text-align:right"><span class="wait num">9 d</span></td></tr>
+      <tr><td><span class="ref">RA-2026-000011</span></td><td><b>Motorcycle hit, rider fled scene</b></td><td>Hit and Run</td><td>Brgy. Sample 2</td><td><span class="badge b-rev">under review</span></td><td style="text-align:right"><span class="wait num">7 d</span></td></tr>
+      <tr><td><span class="ref">RA-2026-000012</span></td><td><b>Tricycle rollover near market road</b></td><td>Motorcycle Accident</td><td>Brgy. Sample 3</td><td><span class="badge b-cli">needs clarification</span></td><td style="text-align:right"><span class="num">5 d</span></td></tr>
+    </table>
+  </div>
+</body></html>

@@ -1,0 +1,168 @@
+/* Mapbox theme: popups, controls and attribution in the dark Roadwatch style.
+   Colour tokens fall back to the values seen in the app if a name is missing. */
+
+.rw-mapbox {
+  --rw-surface: hsl(var(--surface, 0 0% 11%));
+  --rw-border: hsl(var(--border, 0 0% 100%) / 0.1);
+  --rw-text: hsl(var(--text-1, 40 20% 94%));
+  --rw-text-dim: hsl(var(--text-3, 40 6% 62%));
+  --rw-accent: #efe2b0;
+  background: #121212;
+  border: 1px solid var(--rw-border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.rw-mapbox .mapboxgl-map {
+  font-family: inherit;
+}
+
+/* ---------- Controls ---------- */
+
+.rw-mapbox .mapboxgl-ctrl-group {
+  background: var(--rw-surface);
+  border: 1px solid var(--rw-border);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.rw-mapbox .mapboxgl-ctrl-group button {
+  background-color: transparent;
+  border-color: var(--rw-border);
+}
+
+.rw-mapbox .mapboxgl-ctrl-group button:hover {
+  background-color: rgba(239, 226, 176, 0.14);
+}
+
+/* The control icons are dark strokes, so they are inverted to read on charcoal. */
+.rw-mapbox .mapboxgl-ctrl-icon {
+  filter: invert(1) brightness(1.1);
+}
+
+/* ---------- Attribution (must stay visible) ---------- */
+
+.rw-mapbox .mapboxgl-ctrl-attrib {
+  background: rgba(18, 18, 18, 0.75);
+  color: var(--rw-text-dim);
+}
+
+.rw-mapbox .mapboxgl-ctrl-attrib a {
+  color: var(--rw-text-dim);
+}
+
+.rw-mapbox .mapboxgl-ctrl-attrib a:hover {
+  color: var(--rw-accent);
+}
+
+.rw-mapbox .mapboxgl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+/* ---------- Popups ---------- */
+
+.rw-mapbox .mapboxgl-popup-content {
+  background: var(--rw-surface);
+  color: var(--rw-text);
+  border: 1px solid var(--rw-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 12px 28px 12px 14px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.rw-mapbox .mapboxgl-popup-close-button {
+  color: var(--rw-text-dim);
+  font-size: 18px;
+  padding: 2px 8px;
+}
+
+.rw-mapbox .mapboxgl-popup-close-button:hover {
+  background: transparent;
+  color: var(--rw-accent);
+}
+
+.rw-mapbox .mapboxgl-popup-anchor-top .mapboxgl-popup-tip,
+.rw-mapbox .mapboxgl-popup-anchor-top-left .mapboxgl-popup-tip,
+.rw-mapbox .mapboxgl-popup-anchor-top-right .mapboxgl-popup-tip {
+  border-bottom-color: var(--rw-surface);
+}
+
+.rw-mapbox .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip,
+.rw-mapbox .mapboxgl-popup-anchor-bottom-left .mapboxgl-popup-tip,
+.rw-mapbox .mapboxgl-popup-anchor-bottom-right .mapboxgl-popup-tip {
+  border-top-color: var(--rw-surface);
+}
+
+.rw-mapbox .mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
+  border-right-color: var(--rw-surface);
+}
+
+.rw-mapbox .mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+  border-left-color: var(--rw-surface);
+}
+
+.rw-popup {
+  min-width: 200px;
+}
+
+.rw-popup__location {
+  font-size: 0.875rem;
+  color: var(--rw-text-dim);
+}
+
+.rw-popup__status {
+  margin-top: 0.5rem;
+}
+
+.rw-popup__button {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* ---------- Shown when no Mapbox token is configured ---------- */
+
+.rw-map-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  background: #121212;
+  border: 1px dashed hsl(var(--border, 0 0% 100%) / 0.2);
+  color: hsl(var(--text-3, 40 6% 62%));
+  font-size: 0.875rem;
+}
+
+.rw-map-missing strong {
+  color: hsl(var(--text-1, 40 20% 94%));
+}
+
+.rw-map-missing code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+/* ---------- 2D / 3D toggle ---------- */
+
+.rw-mapbox .rw-view-toggle {
+  width: 29px;
+  height: 29px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--rw-text);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.rw-mapbox .rw-view-toggle:hover {
+  color: var(--rw-accent);
+}
