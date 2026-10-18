@@ -1,15 +1,54 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { SingleReportMap } from '../components/MapView';
 import { timeAgo } from '../services/format';
 import { Gallery, useEvidenceImages } from '../components/EvidenceGallery';
 import Modal from '../components/Modal';
+import ActionDialog from '../components/ActionDialog';
 import '../reportDetail.css';
 
 const statusLabel = (s) => String(s || '').replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 const fmtDate = (d) => (d ? String(d).slice(0, 10) : '-');
+
+// Mirrors the server's transition matrix (utils/helpers.js) so a button is only
+// enabled when the server would accept that move. The server still has the final say.
+const ADMIN_NEXT = {
+  submitted: ['under_review'],
+  under_review: ['needs_clarification', 'verified', 'rejected'],
+  needs_clarification: ['under_review'],
+  verified: ['assigned']
+};
+const OFFICER_NEXT = {
+  assigned: ['in_progress'],
+  in_progress: ['needs_clarification', 'resolved']
+};
+
+const ADMIN_HINT = {
+  submitted: 'Start by moving this report to Under review.',
+  under_review: 'Verify it, reject it, or ask the reporter for more information.',
+  needs_clarification: 'Waiting on the reporter. You can move it back to Under review once they respond.',
+  verified: 'Verified. Assign a traffic officer to investigate.',
+  assigned: 'An officer is assigned and will investigate.',
+  in_progress: 'The assigned officer is investigating.',
+  resolved: 'This report is resolved. No further changes are possible.',
+  rejected: 'This report was rejected. No further changes are possible.'
+};
+
+// Wording and rules for the note dialog that opens for each status change.
+const STATUS_COPY = {
+  verified: { title: 'Verify this report', intro: 'Verifying makes this an official record. You can add a note for the history.', label: 'Verification note', submit: 'Verify report', done: 'Report verified.' },
+  rejected: { title: 'Reject this report', intro: 'Explain why. The reason is saved to the history and the reporter is notified.', label: 'Reason for rejection', submit: 'Reject report', required: true, tone: 'danger', done: 'Report rejected.' },
+  under_review: { title: 'Move to under review', intro: 'Staff are looking into this report.', label: 'Note', submit: 'Move to under review', done: 'Moved to under review.' },
+  needs_clarification: { title: 'Ask for more information', intro: 'Tell the reporter what is missing. They can edit the report and send it back.', label: 'What is needed?', submit: 'Send request', required: true, done: 'Clarification requested.' },
+  in_progress: { title: 'Start investigation', intro: 'Mark this report as being investigated.', label: 'Note', submit: 'Start investigation', done: 'Investigation started.' },
+  resolved: { title: 'Mark as resolved', intro: 'This closes the report. No further status changes will be possible.', label: 'Resolution note', submit: 'Mark resolved', done: 'Report marked as resolved.' }
+};
+
+const EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const errMsg = (err, fallback) => err?.response?.data?.error?.message || fallback;
 
 export default function ReportDetail() {
   const { user } = useAuth();
@@ -26,6 +65,20 @@ export default function ReportDetail() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [pickedOfficer, setPickedOfficer] = useState(null);
   const [assignError, setAssignError] = useState('');
+  const location = useLocation();
+  const [notice, setNotice] = useState(
+    location.state?.notice ? { kind: location.state.noticeKind || 'ok', text: location.state.notice } : null
+  );
+  // Which dialog is open: { type: 'status', status } | { type: 'findings' } | { type: 'upload', file }
+  const [dialog, setDialog] = useState(null);
+  const [dialogError, setDialogError] = useState('');
+
+  // Success messages fade on their own; errors stay until dismissed.
+  useEffect(() => {
+    if (notice?.kind !== 'ok') return undefined;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   useEffect(() => {
     async function load() {
@@ -51,19 +104,30 @@ export default function ReportDetail() {
       .catch(() => { setOfficers([]); setOfficersFailed(true); });
   }, [user.role]);
 
-  const handleStatusChange = async (newStatus, reason) => {
+  const reload = async () => {
+    const res = await api.get(`/reports/${id}`);
+    setReport(res.data);
+    setEvidence(res.data.evidence || []);
+    setHistory(res.data.status_history || []);
+  };
+
+  const openDialog = (next) => { setDialogError(''); setNotice(null); setDialog(next); };
+  const closeDialog = () => { if (!statusLoading) { setDialog(null); setDialogError(''); } };
+
+  const submitStatus = async (status, reason) => {
     setStatusLoading(true);
+    setDialogError('');
     try {
       if (user.role === 'admin') {
-        await api.patch(`/reports/${id}/verify`, { status: newStatus, verification_notes: reason });
+        await api.patch(`/reports/${id}/verify`, { status, verification_notes: reason || undefined });
       } else {
-        await api.patch(`/traffic-officer/reports/${id}/status`, { status: newStatus, reason });
+        await api.patch(`/traffic-officer/reports/${id}/status`, { status, reason: reason || undefined });
       }
-      const res = await api.get(`/reports/${id}`);
-      setReport(res.data);
-      setHistory(res.data.status_history || []);
+      await reload();
+      setDialog(null);
+      setNotice({ kind: 'ok', text: STATUS_COPY[status]?.done || 'Status updated.' });
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Update failed');
+      setDialogError(errMsg(err, 'Update failed. Try again.'));
     } finally {
       setStatusLoading(false);
     }
@@ -74,55 +138,75 @@ export default function ReportDetail() {
     setAssignError('');
     try {
       await api.patch(`/reports/${id}/verify`, { status: 'assigned', assignedTo: officerId });
-      const res = await api.get(`/reports/${id}`);
-      setReport(res.data);
-      setHistory(res.data.status_history || []);
+      await reload();
       setAssignOpen(false);
       setPickedOfficer(null);
+      setNotice({ kind: 'ok', text: 'Officer assigned.' });
     } catch (err) {
-      setAssignError(err.response?.data?.error?.message || 'Assign failed. Try again.');
+      setAssignError(errMsg(err, 'Assign failed. Try again.'));
     } finally {
       setStatusLoading(false);
     }
   };
 
-  const openAssign = () => { setAssignError(''); setPickedOfficer(null); setAssignOpen(true); };
+  const openAssign = () => { setAssignError(''); setPickedOfficer(null); setNotice(null); setAssignOpen(true); };
 
-  const handleFindings = async (findings) => {
+  const submitFindings = async (findings) => {
     setStatusLoading(true);
+    setDialogError('');
     try {
       await api.post(`/traffic-officer/reports/${id}/findings`, { findings });
-      const res = await api.get(`/reports/${id}`);
-      setReport(res.data);
+      await reload();
+      setDialog(null);
+      setNotice({ kind: 'ok', text: 'Findings saved.' });
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed');
+      setDialogError(errMsg(err, 'Could not save the findings. Try again.'));
     } finally {
       setStatusLoading(false);
     }
   };
 
-  const uploadEvidence = async (file, description) => {
+  const submitUpload = async (description) => {
+    const file = dialog?.file;
+    if (!file) return;
     const formData = new FormData();
     formData.append('file', file);
     formData.append('description', description);
+    setStatusLoading(true);
+    setDialogError('');
     try {
       await api.post(`/reports/${id}/evidence`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const res = await api.get(`/reports/${id}`);
-      setEvidence(res.data.evidence || []);
+      await reload();
+      setDialog(null);
+      setNotice({ kind: 'ok', text: `${file.name} uploaded.` });
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Upload failed');
+      setDialogError(errMsg(err, 'Upload failed. Try again.'));
+    } finally {
+      setStatusLoading(false);
     }
   };
 
   // Evidence is fetched with the auth header and opened as a blob; files are never public URLs.
+  // The tab is opened first, inside the click, so pop-up blockers do not stop it.
   const viewEvidence = async (e) => {
+    const tab = window.open('', '_blank');
     try {
       const res = await api.get(`/reports/${id}/evidence/${e.id}`, { responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
-      window.open(url, '_blank');
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = e.file_name || 'evidence';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
-      alert('Could not open the evidence file');
+    } catch (err) {
+      if (tab) tab.close();
+      setNotice({ kind: 'error', text: errMsg(err, 'Could not open the evidence file.') });
     }
   };
 
@@ -182,12 +266,27 @@ export default function ReportDetail() {
     </div>
   );
 
+  const adminCan = (to) => !statusLoading && (ADMIN_NEXT[report.status] || []).includes(to);
+  const officerCan = (to) => !statusLoading && (
+    isAdmin ? (report.status === 'in_progress' && to === 'resolved') : (OFFICER_NEXT[report.status] || []).includes(to)
+  );
+  const blockedTip = `Not available while the report is ${statusLabel(report.status).toLowerCase()}`;
+  const primaryNext = report.status === 'submitted' ? 'under_review' : 'verified';
+  const isPrimary = (to) => primaryNext === to && adminCan(to);
+
   const pickFile = (e) => {
-    if (e.target.files[0]) {
-      const desc = prompt('Description (optional):');
-      uploadEvidence(e.target.files[0], desc || '');
-      e.target.value = '';
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!EVIDENCE_TYPES.includes(file.type)) {
+      setNotice({ kind: 'error', text: 'Only JPG, PNG, WebP or PDF files can be uploaded.' });
+      return;
     }
+    if (file.size > MAX_EVIDENCE_BYTES) {
+      setNotice({ kind: 'error', text: 'That file is over the 10 MB limit.' });
+      return;
+    }
+    openDialog({ type: 'upload', file });
   };
 
   return (
@@ -195,6 +294,12 @@ export default function ReportDetail() {
       <Link to="/reports" className="rd-back">‹ All reports</Link>
 
       {error && <p className="rd-error" role="alert">{error}</p>}
+      {notice && (
+        <p className={`rd-notice rd-notice--${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
+          <span>{notice.text}</span>
+          <button type="button" aria-label="Dismiss message" onClick={() => setNotice(null)}>×</button>
+        </p>
+      )}
 
       <header className="rd-hd">
         <div className="rd-hd-main">
@@ -289,17 +394,13 @@ export default function ReportDetail() {
             <section className="rd-card" aria-label="Admin actions">
               <h2>Review</h2>
               <div className="rd-actions">
-                <button type="button" className="rd-btn rd-btn--primary" disabled={statusLoading || report.status === 'verified'} onClick={() => handleStatusChange('verified', prompt('Notes (optional):'))}>Verify</button>
-                <button type="button" className="rd-btn rd-btn--danger" disabled={statusLoading || report.status === 'rejected'} onClick={() => handleStatusChange('rejected', prompt('Notes (optional):'))}>Reject</button>
-                <button type="button" className="rd-btn" disabled={statusLoading || report.status === 'under_review'} onClick={() => handleStatusChange('under_review', prompt('Notes (optional):'))}>Under review</button>
-                <button type="button" className="rd-btn" disabled={statusLoading || report.status === 'needs_clarification'} onClick={() => handleStatusChange('needs_clarification', prompt('Notes (optional):'))}>Needs clarification</button>
+                <button type="button" className={`rd-btn${isPrimary('verified') ? ' rd-btn--primary' : ''}`} disabled={!adminCan('verified')} title={adminCan('verified') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'verified' })}>Verify</button>
+                <button type="button" className="rd-btn rd-btn--danger" disabled={!adminCan('rejected')} title={adminCan('rejected') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'rejected' })}>Reject</button>
+                <button type="button" className={`rd-btn${isPrimary('under_review') ? ' rd-btn--primary' : ''}`} disabled={!adminCan('under_review')} title={adminCan('under_review') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'under_review' })}>Under review</button>
+                <button type="button" className="rd-btn" disabled={!adminCan('needs_clarification')} title={adminCan('needs_clarification') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'needs_clarification' })}>Needs clarification</button>
               </div>
-              <button type="button" className="rd-btn rd-btn--wide" disabled={statusLoading || report.status !== 'verified'} onClick={openAssign}>Assign officer</button>
-              {report.status !== 'verified' && (
-                <p className="rd-muted">
-                  {report.assigned_to ? 'This report already has an officer.' : 'Verify the report first, then you can assign an officer.'}
-                </p>
-              )}
+              <button type="button" className={`rd-btn rd-btn--wide${adminCan('assigned') ? ' rd-btn--primary' : ''}`} disabled={!adminCan('assigned')} title={adminCan('assigned') ? undefined : blockedTip} onClick={openAssign}>Assign officer</button>
+              <p className="rd-muted">{ADMIN_HINT[report.status]}</p>
               <p className="rd-muted">Every change is saved to the history with your note.</p>
             </section>
           )}
@@ -309,10 +410,10 @@ export default function ReportDetail() {
               <h2>Officer actions</h2>
               <div className="rd-actions">
                 {['in_progress', 'needs_clarification', 'resolved'].map((st) => (
-                  <button key={st} type="button" className={`rd-btn${report.status === st ? ' rd-btn--primary' : ''}`} disabled={statusLoading || report.status === st} onClick={() => handleStatusChange(st, prompt('Reason (optional):'))}>{statusLabel(st)}</button>
+                  <button key={st} type="button" className={`rd-btn${report.status === st ? ' rd-btn--primary' : ''}`} disabled={!officerCan(st)} title={officerCan(st) ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: st })}>{statusLabel(st)}</button>
                 ))}
               </div>
-              <button type="button" className="rd-btn rd-btn--wide" disabled={statusLoading} onClick={() => { const f = prompt('Enter findings:'); if (f) handleFindings(f); }}>Add findings</button>
+              <button type="button" className="rd-btn rd-btn--wide" disabled={statusLoading} onClick={() => openDialog({ type: 'findings' })}>Add findings</button>
             </section>
           )}
 
@@ -340,6 +441,57 @@ export default function ReportDetail() {
           </section>
         </aside>
       </div>
+      {dialog?.type === 'status' && (() => {
+        const c = STATUS_COPY[dialog.status];
+        return (
+          <ActionDialog
+            key={dialog.status}
+            title={c.title}
+            intro={c.intro}
+            label={c.label}
+            required={Boolean(c.required)}
+            tone={c.tone}
+            submitLabel={c.submit}
+            busyLabel="Saving…"
+            busy={statusLoading}
+            error={dialogError}
+            onCancel={closeDialog}
+            onSubmit={(text) => submitStatus(dialog.status, text)}
+          />
+        );
+      })()}
+      {dialog?.type === 'findings' && (
+        <ActionDialog
+          title="Add findings"
+          intro={`Record what you found while investigating ${report.report_reference || `report #${report.id}`}. The reporter is notified.`}
+          label="Findings"
+          placeholder="What happened, what you observed, actions taken…"
+          required
+          maxLength={2000}
+          rows={6}
+          submitLabel="Save findings"
+          busy={statusLoading}
+          error={dialogError}
+          onCancel={closeDialog}
+          onSubmit={submitFindings}
+        />
+      )}
+      {dialog?.type === 'upload' && (
+        <ActionDialog
+          title="Upload a file"
+          label="Description"
+          placeholder="What does this show?"
+          submitLabel="Upload"
+          busyLabel="Uploading…"
+          rows={3}
+          busy={statusLoading}
+          error={dialogError}
+          onCancel={closeDialog}
+          onSubmit={submitUpload}
+        >
+          <p className="rd-file-chip"><b>{dialog.file.name}</b><small>{(dialog.file.size / 1024 / 1024).toFixed(2)} MB</small></p>
+        </ActionDialog>
+      )}
       {assignOpen && (
         <Modal title="Assign an officer" onClose={() => { if (!statusLoading) setAssignOpen(false); }}>
           <p className="rd-muted" style={{ marginBottom: 12 }}>

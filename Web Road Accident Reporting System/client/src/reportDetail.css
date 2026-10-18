@@ -86,3 +86,22 @@
 .rd-officer small { font-size: 0.75rem; color: hsl(var(--text-3)); overflow: hidden; text-overflow: ellipsis; }
 .rd-assign-err { margin: 0 0 12px; padding: 8px 12px; border-radius: 10px; background: hsl(var(--status-rejected) / .14); color: hsl(var(--text-1)); font-size: 0.8125rem; }
 .rd-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Inline status message (replaces browser alert popups) */
+.rd-notice { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; border-radius: 14px; font-size: 0.875rem; line-height: 1.4; }
+.rd-notice--ok { background: hsl(var(--status-verified) / .14); color: hsl(var(--text-1)); border: 1px solid hsl(var(--status-verified) / .3); }
+.rd-notice--error { background: hsl(var(--status-rejected) / .12); color: hsl(var(--status-rejected)); border: 1px solid hsl(var(--status-rejected) / .28); }
+.rd-notice button { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 0; background: transparent; color: inherit; font-size: 1.125rem; line-height: 1; cursor: pointer; opacity: .75; }
+.rd-notice button:hover { opacity: 1; background: hsl(var(--line) / .1); }
+
+/* Note dialog (verify / reject / findings / upload) */
+.rd-field { display: grid; gap: 6px; margin: 0 0 14px; text-transform: none; letter-spacing: normal; font-size: 0.8125rem; color: hsl(var(--text-2)); }
+.rd-field textarea { width: 100%; resize: vertical; min-height: 84px; padding: 10px 12px; border-radius: 12px; border: 1px solid hsl(var(--line) / .16); background: hsl(var(--surface-2)); color: hsl(var(--text-1)); font: inherit; font-size: 0.9375rem; line-height: 1.5; }
+.rd-field textarea:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 1px; }
+.rd-field textarea[aria-invalid="true"] { border-color: hsl(var(--status-rejected)); }
+.rd-field-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 0.75rem; color: hsl(var(--text-3)); }
+.rd-field-foot em { font-style: normal; }
+.rd-field-foot em.is-bad { color: hsl(var(--status-rejected)); }
+.rd-file-chip { display: flex; flex-direction: column; gap: 2px; margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: hsl(var(--surface-2)); border: 1px solid hsl(var(--line) / .1); }
+.rd-file-chip b { font-size: 0.875rem; font-weight: 500; overflow-wrap: anywhere; }
+.rd-file-chip small { font-size: 0.75rem; color: hsl(var(--text-3)); }

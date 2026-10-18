@@ -77,3 +77,11 @@
   .rs-detail { max-height: none; }
 }
 @media (prefers-reduced-motion: reduce) { .rs-skels i { animation: none; } }
+
+/* Photo beside the facts at a fixed size, instead of stretching across the whole pane.
+   Without a photo the facts simply take the full width. */
+.rs-body { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 18px 22px; margin-top: 16px; }
+.rs-body > .eg { flex: 0 0 260px; max-width: 100%; }
+.rs-body .eg--compact .eg-hero { aspect-ratio: 4 / 3; max-height: 195px; }
+.rs-info { flex: 1 1 320px; min-width: 0; }
+.rs-body .rs-facts { margin-top: 0; padding-top: 0; border-top: 0; }
