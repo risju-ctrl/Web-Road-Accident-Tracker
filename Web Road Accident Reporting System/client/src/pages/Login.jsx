@@ -30,6 +30,7 @@ export default function Login() {
     <DesktopWindow>
     <div className="container" style={{ maxWidth: '400px', marginTop: '4rem' }}>
       <div className="card" style={{ padding: '1.5rem' }}>
+        <img className="agap-lockup" src="/agap-logo.png" alt="AGAP road incident reporting" />
         <h2 style={{ marginBottom: '1.5rem' }}>Login</h2>
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit}>

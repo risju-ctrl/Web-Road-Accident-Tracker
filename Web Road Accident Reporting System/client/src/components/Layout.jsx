@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 import UserMenu from './UserMenu';
 import DesktopWindow from './DesktopWindow';
 
@@ -38,6 +39,7 @@ export default function Layout() {
         ))}
       </nav>
       <div className="rw-tools">
+        <ThemeToggle />
         <NotificationBell />
         <UserMenu />
       </div>

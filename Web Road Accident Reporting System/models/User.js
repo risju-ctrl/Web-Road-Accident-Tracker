@@ -38,6 +38,7 @@ export const User = {
     const fields = [];
     const params = [];
     if (data.name) { fields.push('name = ?'); params.push(data.name); }
+    if (data.email) { fields.push('email = ?'); params.push(data.email); }
     if (data.phone !== undefined) { fields.push('phone = ?'); params.push(data.phone); }
     if (data.is_active !== undefined) { fields.push('is_active = ?'); params.push(data.is_active); }
     if (data.role) { fields.push('role = ?'); params.push(data.role); }
@@ -50,6 +51,10 @@ export const User = {
     params.push(id);
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, params);
     return this.findById(id);
+  },
+  async remove(id) {
+    const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+    return result.affectedRows > 0;
   },
   async verifyPassword(user, password) {
     return bcrypt.compare(password, user.password_hash);

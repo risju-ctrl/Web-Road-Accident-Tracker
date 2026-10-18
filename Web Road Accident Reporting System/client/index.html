@@ -7,10 +7,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" />
-    <title>Road Accident Reporting System</title>
+    <link rel="icon" type="image/png" href="/agap-mark.png" />
+    <title>AGAP | Road Incident Reporting</title>
     <script>
-      // The site is always dark, so there is no saved theme to restore.
-      document.documentElement.dataset.theme = 'dark';
+      // Restore the saved theme before first paint so there is no flash. Dark is the default.
+      (function () {
+        var theme = 'dark';
+        try { if (localStorage.getItem('theme') === 'light') theme = 'light'; } catch (e) {}
+        document.documentElement.dataset.theme = theme;
+      })();
     </script>
   </head>
   <body>
