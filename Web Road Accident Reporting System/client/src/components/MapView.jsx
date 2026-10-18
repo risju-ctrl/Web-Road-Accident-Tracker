@@ -133,6 +133,45 @@ function cssColor(value, fallback = '#8a8a8a') {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 
+// Below this Mapbox zoom, nearby pins merge into numbered clusters. At and above it
+// the individual pins (with their blips and report numbers) take over.
+const CLUSTER_ZOOM = 11;
+
+const PIN_LAYERS = [
+  'rw-pin-pulse-fast',
+  'rw-pin-pulse-mid',
+  'rw-pin-pulse-slow',
+  'rw-pin-halo',
+  'rw-pin-core'
+];
+const CLUSTER_LAYERS = ['rw-cluster-halo', 'rw-cluster-core', 'rw-cluster-count', 'rw-cluster-single'];
+
+// "rgba(r,g,b,a)" from cssColor with a different alpha, for the heatmap ramp.
+function withAlpha(color, alpha) {
+  const match = /rgba?\(([^)]+)\)/.exec(color || '');
+  if (!match) return color;
+  const [r, g, b] = match[1].split(',').map((part) => part.trim());
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// Heatmap and clustering are switched on and off without rebuilding layers: layers
+// are hidden, and the pin layers are told to start drawing at the cluster zoom.
+function applyLayerModes(map, { heatmap, cluster }) {
+  const show = (id, on) => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  };
+  const range = (id, min, max) => {
+    if (map.getLayer(id)) map.setLayerZoomRange(id, min, max);
+  };
+
+  show('rw-heat', heatmap);
+  CLUSTER_LAYERS.forEach((id) => show(id, cluster));
+
+  const from = cluster ? CLUSTER_ZOOM : 0;
+  PIN_LAYERS.forEach((id) => range(id, from, 24));
+  range('rw-pin-label-short', from, 12);
+}
+
 // RA-2026-000042 -> #0042. Short enough to sit under a pin without crowding it.
 export function shortRef(reference) {
   const tail = String(reference || '').split('-').pop() || '';
@@ -498,11 +537,24 @@ const SEVERITY_COLOR_KEYS = {
 // Adds the sources and layers the report map draws. Safe to call repeatedly: it
 // is run after each style load, when Mapbox has dropped everything custom.
 function ensureReportLayers(map, colors) {
-  const sources = ['rw-zones', 'rw-route', 'rw-active', 'rw-focus', 'rw-picked', 'rw-pins'];
+  const sources = ['rw-zones', 'rw-route', 'rw-active', 'rw-focus', 'rw-picked', 'rw-pins', 'rw-heat', 'rw-me'];
 
   sources.forEach((id) => {
     if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY });
   });
+
+  // The cluster source merges nearby points itself. `worst` keeps the lowest severity
+  // rank in each cluster (0 = fatal), which colours it.
+  if (!map.getSource('rw-clusters')) {
+    map.addSource('rw-clusters', {
+      type: 'geojson',
+      data: EMPTY,
+      cluster: true,
+      clusterRadius: 48,
+      clusterMaxZoom: CLUSTER_ZOOM - 1,
+      clusterProperties: { worst: ['min', ['get', 'rank']] }
+    });
+  }
 
   const line = (id, source, paint) => {
     if (map.getLayer(id)) return;
@@ -514,6 +566,32 @@ function ensureReportLayers(map, colors) {
       paint
     });
   };
+
+  // Heatmap sits under everything else. Severity sets each report's weight, and it
+  // fades out once the map is zoomed in far enough to see single pins.
+  if (!map.getLayer('rw-heat')) {
+    addTopLayer(map, {
+      id: 'rw-heat',
+      type: 'heatmap',
+      source: 'rw-heat',
+      maxzoom: 17,
+      layout: { visibility: 'none' },
+      paint: {
+        'heatmap-weight': ['get', 'w'],
+        'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 7, 0.7, 15, 2.2],
+        'heatmap-color': [
+          'interpolate', ['linear'], ['heatmap-density'],
+          0, 'rgba(0,0,0,0)',
+          0.2, withAlpha(colors.amber, 0.4),
+          0.5, withAlpha(colors.orange, 0.65),
+          0.8, withAlpha(colors.red, 0.85),
+          1, colors.red
+        ],
+        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 7, 16, 12, 32, 16, 64],
+        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.9, 17, 0]
+      }
+    });
+  }
 
   // Hotspot zones: a soft glow, a translucent disc with a ring, and one expanding
   // ring per speed tier that the blip animation drives.
@@ -681,6 +759,116 @@ function ensureReportLayers(map, colors) {
 
   label('rw-pin-label-short', 'labelShort', 0, 12);
   label('rw-pin-label-full', 'labelFull', 12, 24);
+
+  // Zoomed-out clusters: a numbered disc coloured by the worst severity inside, and a
+  // plain dot for a report that has no neighbours, so lone reports never disappear.
+  const clusterColor = [
+    'match', ['get', 'worst'],
+    0, colors.red,
+    1, colors.orange,
+    2, colors.amber,
+    3, colors.green,
+    colors.muted
+  ];
+  const hasCount = ['has', 'point_count'];
+
+  if (!map.getLayer('rw-cluster-halo')) {
+    addTopLayer(map, {
+      id: 'rw-cluster-halo',
+      type: 'circle',
+      source: 'rw-clusters',
+      maxzoom: CLUSTER_ZOOM,
+      filter: hasCount,
+      paint: {
+        'circle-radius': ['step', ['get', 'point_count'], 26, 5, 32, 15, 40],
+        'circle-color': clusterColor,
+        'circle-opacity': 0.22,
+        'circle-blur': 0.6
+      }
+    });
+  }
+
+  if (!map.getLayer('rw-cluster-core')) {
+    addTopLayer(map, {
+      id: 'rw-cluster-core',
+      type: 'circle',
+      source: 'rw-clusters',
+      maxzoom: CLUSTER_ZOOM,
+      filter: hasCount,
+      paint: {
+        'circle-radius': ['step', ['get', 'point_count'], 14, 5, 18, 15, 23],
+        'circle-color': clusterColor,
+        'circle-stroke-color': 'rgba(255,255,255,0.85)',
+        'circle-stroke-width': 1.5
+      }
+    });
+  }
+
+  if (!map.getLayer('rw-cluster-count')) {
+    addTopLayer(map, {
+      id: 'rw-cluster-count',
+      type: 'symbol',
+      source: 'rw-clusters',
+      maxzoom: CLUSTER_ZOOM,
+      filter: hasCount,
+      layout: {
+        'text-field': ['get', 'point_count_abbreviated'],
+        'text-font': LABEL_FONT,
+        'text-size': 12,
+        'text-allow-overlap': true
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(11,18,32,0.85)',
+        'text-halo-width': 1.4
+      }
+    });
+  }
+
+  if (!map.getLayer('rw-cluster-single')) {
+    addTopLayer(map, {
+      id: 'rw-cluster-single',
+      type: 'circle',
+      source: 'rw-clusters',
+      maxzoom: CLUSTER_ZOOM,
+      filter: ['!', hasCount],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': ['get', 'color'],
+        'circle-stroke-color': '#0b1220',
+        'circle-stroke-width': 1.5
+      }
+    });
+  }
+
+  // The visitor's own position, drawn last so it is never hidden under a pin.
+  if (!map.getLayer('rw-me-halo')) {
+    addTopLayer(map, {
+      id: 'rw-me-halo',
+      type: 'circle',
+      source: 'rw-me',
+      paint: {
+        'circle-radius': 16,
+        'circle-color': '#3b82f6',
+        'circle-opacity': 0.25,
+        'circle-pitch-alignment': 'map'
+      }
+    });
+  }
+
+  if (!map.getLayer('rw-me-dot')) {
+    addTopLayer(map, {
+      id: 'rw-me-dot',
+      type: 'circle',
+      source: 'rw-me',
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#3b82f6',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2.5
+      }
+    });
+  }
 }
 
 export function ReportMap({
@@ -708,7 +896,11 @@ export function ReportMap({
   // Hotspot zones ({ id, latitude, longitude, radiusM, tier, count }) and the blip.
   zones = [],
   blip = false,
-  onZoneSelect = null
+  onZoneSelect = null,
+  // Heat layer, zoomed-out clusters, and the visitor's own position ({ latitude, longitude }).
+  heatmap = false,
+  cluster = false,
+  me = null
 }) {
   const { user } = useAuth();
   const c = useThemeColors();
@@ -811,6 +1003,7 @@ export function ReportMap({
         labelShort: shortRef(report.report_reference),
         labelFull: report.report_reference || '',
         rank: { fatal: 0, major: 1, moderate: 2, minor: 3 }[report.severity] ?? 4,
+        w: { fatal: 1, major: 0.75, moderate: 0.5, minor: 0.3 }[report.severity] ?? 0.3,
         color,
         haloR,
         haloOpacity,
@@ -914,23 +1107,51 @@ export function ReportMap({
       map.getCanvas().style.cursor = onMapPickRef.current ? 'crosshair' : '';
     };
 
-    map.on('click', 'rw-pin-core', onPinClick);
+    // A click on a cluster zooms in to where it breaks apart into smaller groups.
+    const onClusterClick = (event) => {
+      const feature = event.features && event.features[0];
+      const source = map.getSource('rw-clusters');
+      if (!feature || !source) return;
+
+      source.getClusterExpansionZoom(feature.properties.cluster_id, (error, zoomTo) => {
+        if (error) return;
+        map.easeTo({
+          center: feature.geometry.coordinates,
+          zoom: Math.min(zoomTo + 0.5, 17)
+        });
+      });
+    };
+
+    // Lone reports shown while zoomed out behave exactly like full pins.
+    const pinLayers = ['rw-pin-core', 'rw-cluster-single'];
+
+    pinLayers.forEach((layer) => {
+      map.on('click', layer, onPinClick);
+      map.on('mouseenter', layer, pointer);
+      map.on('mouseleave', layer, reset);
+      map.on('mousemove', layer, onPinMove);
+      map.on('mouseleave', layer, onPinLeave);
+    });
     map.on('click', onMapClick);
     map.on('click', 'rw-zone-fill', onZoneClick);
-    map.on('mouseenter', 'rw-pin-core', pointer);
-    map.on('mouseleave', 'rw-pin-core', reset);
-    map.on('mousemove', 'rw-pin-core', onPinMove);
-    map.on('mouseleave', 'rw-pin-core', onPinLeave);
+    map.on('click', 'rw-cluster-core', onClusterClick);
+    map.on('mouseenter', 'rw-cluster-core', pointer);
+    map.on('mouseleave', 'rw-cluster-core', reset);
     map.on('move', emit);
 
     return () => {
-      map.off('click', 'rw-pin-core', onPinClick);
+      pinLayers.forEach((layer) => {
+        map.off('click', layer, onPinClick);
+        map.off('mouseenter', layer, pointer);
+        map.off('mouseleave', layer, reset);
+        map.off('mousemove', layer, onPinMove);
+        map.off('mouseleave', layer, onPinLeave);
+      });
       map.off('click', onMapClick);
       map.off('click', 'rw-zone-fill', onZoneClick);
-      map.off('mouseenter', 'rw-pin-core', pointer);
-      map.off('mouseleave', 'rw-pin-core', reset);
-      map.off('mousemove', 'rw-pin-core', onPinMove);
-      map.off('mouseleave', 'rw-pin-core', onPinLeave);
+      map.off('click', 'rw-cluster-core', onClusterClick);
+      map.off('mouseenter', 'rw-cluster-core', pointer);
+      map.off('mouseleave', 'rw-cluster-core', reset);
       map.off('move', emit);
     };
   }, [map]);
@@ -990,6 +1211,15 @@ export function ReportMap({
 
       setSourceData(map, 'rw-zones', zoneData);
       setSourceData(map, 'rw-pins', pinData);
+      setSourceData(map, 'rw-heat', pinData);
+      setSourceData(map, 'rw-clusters', pinData);
+      applyLayerModes(map, { heatmap, cluster });
+      setSourceData(map, 'rw-me', {
+        type: 'FeatureCollection',
+        features: hasCoordinates(me?.latitude, me?.longitude)
+          ? [pointFeature(Number(me.longitude), Number(me.latitude))]
+          : []
+      });
       setSourceData(map, 'rw-route', lineFeature(routePath));
       setSourceData(map, 'rw-active', lineFeature(activePath));
 
@@ -1011,7 +1241,7 @@ export function ReportMap({
     } catch (error) {
       // A style is mid-switch; this effect runs again when it finishes loading.
     }
-  }, [map, styleVersion, pinData, zoneData, routePath, activePath, pickedPoints, focus, glow, colors]);
+  }, [map, styleVersion, pinData, zoneData, routePath, activePath, pickedPoints, focus, glow, colors, heatmap, cluster, me]);
 
   useEffect(() => {
     if (map && hasCoordinates(focus?.latitude, focus?.longitude)) {

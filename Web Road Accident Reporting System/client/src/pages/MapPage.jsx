@@ -11,6 +11,9 @@ import {
 import { BASEMAPS, ReportMap, shortRef } from '../components/MapView';
 import ReportPreview from '../components/ReportPreview';
 import ReportSheet from '../components/ReportSheet';
+import ReplayBar from '../components/ReplayBar';
+import InsightsPanel from '../components/InsightsPanel';
+import { DAY, dayLabel, occurredAt, startOfDay, zonesOnRoute } from '../services/mapInsights';
 import { useAuth } from '../context/AuthContext';
 import '../mapSidebar.css';
 import PlacePicker from '../components/PlacePicker';
@@ -38,7 +41,10 @@ const ICONS = {
   search: 'M11 18a7 7 0 100-14 7 7 0 000 14zM21 21l-4.3-4.3',
   close: 'M6 6l12 12M18 6L6 18',
   plus: 'M12 5v14M5 12h14',
-  review: 'M9 3h6v4H9zM9 5H6a1 1 0 00-1 1v14a1 1 0 001 1h12a1 1 0 001-1V6a1 1 0 00-1-1h-3M9 14l2 2 4-4'
+  review: 'M9 3h6v4H9zM9 5H6a1 1 0 00-1 1v14a1 1 0 001 1h12a1 1 0 001-1V6a1 1 0 00-1-1h-3M9 14l2 2 4-4',
+  clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2',
+  chart: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
+  warn: 'M12 3l10 18H2L12 3zM12 10v5M12 18h.01'
 };
 
 const EMERGENCY_CONTACTS = [
@@ -54,13 +60,17 @@ const RAIL = [
   { key: 'overview', label: 'Overview', icon: 'overview' },
   { key: 'reports', label: 'Reports', icon: 'list' },
   { key: 'hotspots', label: 'Hotspots', icon: 'pin' },
-  { key: 'near', label: 'Near you', icon: 'locate' }
+  { key: 'insights', label: 'Insights', icon: 'chart' },
+  { key: 'near', label: 'Near you', icon: 'locate' },
+  // Not a panel: this one turns the replay bar on and off.
+  { key: 'replay', label: 'Time replay', icon: 'clock', action: 'replay' }
 ];
 
 const PANEL_TITLES = {
   overview: 'Overview',
   reports: 'Reports',
   hotspots: 'Hotspots',
+  insights: 'Insights',
   near: 'Near you',
   hotlines: 'Emergency hotlines'
 };
@@ -69,9 +79,16 @@ const PANEL_SUBTITLES = {
   overview: 'Current situation on the map',
   reports: 'Hover a report to preview it',
   hotspots: 'Busiest locations, with report numbers',
+  insights: 'When and where accidents happen',
   near: 'Closest incidents to your position',
   hotlines: 'Tap to call'
 };
+
+// Danger warnings use every report on record. Set a number of days here to look only
+// at recent accidents, for example 180.
+const DANGER_WINDOW_DAYS = null;
+// How far outside a danger zone's edge the "area ahead" warning starts, in metres.
+const WARN_AHEAD_M = 300;
 
 // Ordered worst first so the layer list matches the severity ramp.
 const SEVERITIES = [
@@ -239,6 +256,14 @@ export default function MapPage() {
   const [showLabels, setShowLabels] = useState(true);
   const [showZones, setShowZones] = useState(true);
   const [pulse, setPulse] = useState(true);
+  const [showHeat, setShowHeat] = useState(false);
+  const [clusterPins, setClusterPins] = useState(true);
+  const [warnOn, setWarnOn] = useState(true);
+  // Time replay: `index` counts days from the first report. While it is on, it
+  // replaces the Period filter.
+  const [replay, setReplay] = useState({ on: false, index: 0, playing: false, speed: 1, window: 'all' });
+  const [watching, setWatching] = useState(false);
+  const [dismissedZone, setDismissedZone] = useState(null);
   // The report being hovered, from a pin or a list row, and where to draw its card.
   const [hover, setHover] = useState(null);
   const mapAreaRef = useRef(null);
@@ -354,7 +379,49 @@ export default function MapPage() {
     return Number.isFinite(time) && Date.now() - time <= span;
   }, [range]);
 
-  const base = useMemo(() => reports.filter(inRange), [reports, inRange]);
+  // When each accident happened (not when it was reported), worked out once.
+  const when = useMemo(
+    () => new Map(reports.map(r => [r.id, occurredAt(r)])),
+    [reports]
+  );
+
+  // The replay runs one day at a time from the earliest accident to today (or to the
+  // latest accident, if one is dated later). `strip` is a small activity chart of the
+  // whole range, in at most 120 columns.
+  const replayInfo = useMemo(() => {
+    const times = [...when.values()].map(stamp => stamp.ms).filter(Number.isFinite);
+    if (times.length === 0) return null;
+
+    const start = startOfDay(Math.min(...times));
+    const end = startOfDay(Math.max(Date.now(), ...times));
+    const count = Math.round((end - start) / DAY) + 1;
+    const columns = Math.min(count, 120);
+    const strip = Array(columns).fill(0);
+
+    times.forEach(t => {
+      const day = Math.round((startOfDay(t) - start) / DAY);
+      strip[Math.min(columns - 1, Math.floor((day / count) * columns))] += 1;
+    });
+
+    return { start, count, strip };
+  }, [when]);
+
+  const replayActive = replay.on && Boolean(replayInfo);
+  const replayIndex = replayInfo ? Math.min(replay.index, replayInfo.count - 1) : 0;
+  const replayEnd = replayInfo ? replayInfo.start + (replayIndex + 1) * DAY - 1 : 0;
+  const replayFrom = replay.window === 'all'
+    ? -Infinity
+    : replayEnd - (replay.window === '7d' ? 7 : 30) * DAY;
+
+  const inReplay = useCallback(r => {
+    const t = when.get(r.id)?.ms;
+    return Number.isFinite(t) && t <= replayEnd && t > replayFrom;
+  }, [when, replayEnd, replayFrom]);
+
+  const base = useMemo(
+    () => reports.filter(replayActive ? inReplay : inRange),
+    [reports, replayActive, inReplay, inRange]
+  );
   const tiles = useMemo(() => ({
     total: base.length,
     pending: base.filter(r => PENDING.includes(r.status)).length,
@@ -494,6 +561,132 @@ export default function MapPage() {
     setSelected(report);
     setFocus(report);
   }, []);
+
+  // ---------- Time replay ----------
+  const toggleReplay = useCallback(() => {
+    setHover(null);
+    setReplay(current => (current.on
+      ? { ...current, on: false, playing: false }
+      : { ...current, on: true, playing: false, index: replayInfo ? replayInfo.count - 1 : 0 }));
+  }, [replayInfo]);
+
+  const playReplay = useCallback(() => {
+    setReplay(current => {
+      if (current.playing) return { ...current, playing: false };
+      const last = replayInfo ? replayInfo.count - 1 : 0;
+      return { ...current, playing: true, index: current.index >= last ? 0 : current.index };
+    });
+  }, [replayInfo]);
+
+  useEffect(() => {
+    if (!replayActive || !replay.playing) return undefined;
+
+    // Long histories skip days per tick so a full replay never takes more than
+    // about 80 seconds at normal speed.
+    const step = Math.max(1, Math.ceil(replayInfo.count / 120));
+    const last = replayInfo.count - 1;
+
+    const timer = setInterval(() => {
+      setReplay(current => (current.index >= last
+        ? { ...current, playing: false }
+        : { ...current, index: Math.min(last, current.index + step) }));
+    }, 700 / replay.speed);
+
+    return () => clearInterval(timer);
+  }, [replayActive, replay.playing, replay.speed, replayInfo]);
+
+  // ---------- Danger warnings ----------
+  // Danger zones are groups of two or more reports whose combined severity is
+  // Elevated or Critical. They use every report on record, not the map filters, so
+  // a warning never depends on what the viewer has switched off.
+  const riskZones = useMemo(() => {
+    const cutoff = DANGER_WINDOW_DAYS ? Date.now() - DANGER_WINDOW_DAYS * DAY : -Infinity;
+    const pool = located.filter(r => {
+      if (r.status === 'rejected') return false;
+      const t = when.get(r.id)?.ms;
+      return !Number.isFinite(t) || t >= cutoff;
+    });
+
+    return buildClusters(pool)
+      .filter(c => c.reports.length >= 2 && c.tier !== 'slow')
+      .map(c => ({
+        key: `${c.center.lat.toFixed(3)},${c.center.lng.toFixed(3)}`,
+        name: c.name,
+        count: c.reports.length,
+        tier: c.tier,
+        lat: c.center.lat,
+        lng: c.center.lng,
+        radiusM: c.radiusM
+      }));
+  }, [located, when]);
+
+  const hasGeo = Number.isFinite(geo.latitude) && Number.isFinite(geo.longitude);
+  const me = useMemo(
+    () => (hasGeo ? { latitude: geo.latitude, longitude: geo.longitude } : null),
+    [hasGeo, geo.latitude, geo.longitude]
+  );
+
+  // The zone the visitor is in or about to reach: inside first, then the more
+  // serious tier, then the closest.
+  const nearZone = useMemo(() => {
+    if (!warnOn || !hasGeo) return null;
+
+    const hits = riskZones
+      .map(zone => {
+        const metres = kmBetween(geo.latitude, geo.longitude, zone.lat, zone.lng) * 1000;
+        return { zone, edgeM: metres - zone.radiusM, inside: metres <= zone.radiusM };
+      })
+      .filter(hit => hit.edgeM <= WARN_AHEAD_M)
+      .sort((a, b) => Number(b.inside) - Number(a.inside)
+        || (a.zone.tier === b.zone.tier ? 0 : a.zone.tier === 'fast' ? -1 : 1)
+        || a.edgeM - b.edgeM);
+
+    return hits[0] || null;
+  }, [warnOn, hasGeo, geo.latitude, geo.longitude, riskZones]);
+
+  // Leaving the area forgets a dismissal, so the warning returns next time.
+  useEffect(() => {
+    if (!nearZone && dismissedZone) setDismissedZone(null);
+  }, [nearZone, dismissedZone]);
+
+  const routeWarn = useMemo(
+    () => (warnOn && route.state === 'ok' ? zonesOnRoute(route.path, riskZones) : []),
+    [warnOn, route, riskZones]
+  );
+
+  // Insights look at every report the account can see, whatever the map filters are
+  // set to, so the numbers stay put while someone explores. Rejected reports are not
+  // accidents. The period ends at the replay day while a replay is running, and
+  // otherwise at the end of the latest day on record.
+  const insightReports = useMemo(() => reports.filter(r => r.status !== 'rejected'), [reports]);
+  const insightAnchor = replayActive
+    ? replayEnd
+    : replayInfo ? replayInfo.start + replayInfo.count * DAY - 1 : Date.now();
+
+  // Keeps the position fresh while the visitor moves, so the warning can fire without
+  // pressing the locate button again.
+  useEffect(() => {
+    if (!watching || !navigator.geolocation) return undefined;
+
+    const id = navigator.geolocation.watchPosition(
+      position => setGeo({
+        state: 'granted',
+        accuracy: Math.round(position.coords.accuracy),
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      }),
+      err => {
+        // A timeout only means no fix yet; a refusal ends the watch.
+        if (err.code === 1) {
+          setGeo({ state: 'denied' });
+          setWatching(false);
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(id);
+  }, [watching]);
 
   // Every point a route can start or end at: the reports that carry coordinates,
   // plus the admin's own position once it has been shared. A Map keeps the point
@@ -786,22 +979,28 @@ export default function MapPage() {
             </span>
 
             <div className="mp-rail-group">
-              {RAIL.map(item => (
+              {RAIL.map(item => {
+                const isReplay = item.action === 'replay';
+                const active = isReplay ? replayActive : panel === item.key;
+
+                return (
                 <button
                   key={item.key}
                   type="button"
-                  className={`mp-rail-btn ${panel === item.key ? 'is-active' : ''}`}
-                  aria-pressed={panel === item.key}
+                  className={`mp-rail-btn ${active ? 'is-active' : ''}`}
+                  aria-pressed={active}
                   aria-label={item.label}
                   data-tip={item.label}
-                  onClick={() => togglePanel(item.key)}
+                  disabled={isReplay && !replayInfo}
+                  onClick={() => (isReplay ? toggleReplay() : togglePanel(item.key))}
                 >
                   <Icon name={item.icon} size={20} />
                   {item.key === 'reports' && filtered.length > 0 && (
                     <i className="mp-rail-badge">{filtered.length > 99 ? '99+' : filtered.length}</i>
                   )}
                 </button>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mp-rail-end">
@@ -920,11 +1119,17 @@ export default function MapPage() {
                     <h3 className="mp-sec">Period</h3>
                     <div className="mp-seg" role="group" aria-label="Date range">
                       {RANGES.map(option => (
-                        <button key={option.key} type="button" className={range === option.key ? 'is-on' : ''} aria-pressed={range === option.key} onClick={() => setRange(option.key)}>
+                        <button key={option.key} type="button" className={range === option.key && !replayActive ? 'is-on' : ''} aria-pressed={range === option.key} disabled={replayActive} onClick={() => setRange(option.key)}>
                           {option.label}
                         </button>
                       ))}
                     </div>
+                    {replayActive && (
+                      <p className="mp-note mp-note--tight">
+                        Time replay is on, so the map shows reports up to {dayLabel(replayEnd)}.{' '}
+                        <button type="button" className="mp-link" onClick={toggleReplay}>Back to live</button>
+                      </p>
+                    )}
 
                     <div className="mp-sec-row">
                       <h3 className="mp-sec">Needs attention</h3>
@@ -978,6 +1183,18 @@ export default function MapPage() {
                     <label className="mp-switch">
                       <input type="checkbox" checked={showLabels} onChange={event => setShowLabels(event.target.checked)} />
                       <span>Show report numbers on pins</span>
+                    </label>
+                    <label className="mp-switch">
+                      <input type="checkbox" checked={showHeat} onChange={event => setShowHeat(event.target.checked)} />
+                      <span>Heatmap</span>
+                    </label>
+                    <label className="mp-switch">
+                      <input type="checkbox" checked={clusterPins} onChange={event => setClusterPins(event.target.checked)} />
+                      <span>Group pins into numbered clusters when zoomed out</span>
+                    </label>
+                    <label className="mp-switch">
+                      <input type="checkbox" checked={warnOn} onChange={event => setWarnOn(event.target.checked)} />
+                      <span>Warn me about accident-prone areas</span>
                     </label>
 
                     <p className="mp-note">Counts cover only the reports your account can see.</p>
@@ -1093,6 +1310,15 @@ export default function MapPage() {
                   )
                 )}
 
+                {panel === 'insights' && (
+                  <InsightsPanel
+                    reports={insightReports}
+                    when={when}
+                    anchorMs={insightAnchor}
+                    onPickReport={selectReport}
+                  />
+                )}
+
                 {panel === 'near' && (
                   <>
                     <p className={`mp-loc is-${geo.state}`}>
@@ -1107,6 +1333,23 @@ export default function MapPage() {
                     >
                       <Icon name="locate" /> {geo.state === 'locating' ? 'Locating...' : geo.state === 'granted' ? 'Update my location' : 'Use my location'}
                     </button>
+
+                    {geo.state === 'granted' && (
+                      <label className="mp-switch">
+                        <input type="checkbox" checked={watching} onChange={event => setWatching(event.target.checked)} />
+                        <span>Keep following my position (for warnings while you travel)</span>
+                      </label>
+                    )}
+
+                    {geo.state === 'granted' && warnOn && (
+                      <p className="mp-note mp-note--tight">
+                        {nearZone
+                          ? `${nearZone.inside ? 'You are inside' : 'You are close to'} an accident-prone area: ${nearZone.zone.name}.`
+                          : riskZones.length === 0
+                            ? 'No accident-prone areas are recorded yet.'
+                            : 'You are not near an accident-prone area.'}
+                      </p>
+                    )}
 
                     {nearest.length > 0 && (
                       <ul className="mp-cards">
@@ -1178,7 +1421,58 @@ export default function MapPage() {
             zones={showZones ? zones : EMPTY_ZONES}
             blip={pulse}
             onZoneSelect={selectZone}
+            heatmap={showHeat}
+            cluster={clusterPins}
+            me={me}
           />
+
+          {nearZone && dismissedZone !== nearZone.zone.key && (
+            <div className={`mp-warn is-${nearZone.zone.tier}`} role="alert">
+              <span className="mp-warn-icon" aria-hidden="true"><Icon name="warn" size={20} /></span>
+              <span className="mp-warn-text">
+                <strong>{nearZone.inside ? 'You are in an accident-prone area' : 'Accident-prone area ahead'}</strong>
+                <span>
+                  {nearZone.zone.name} · {nearZone.zone.count} reports · {TIER_LABEL[nearZone.zone.tier]}
+                  {nearZone.inside ? '' : ` · about ${formatDistance(Math.max(0, nearZone.edgeM) / 1000)} away`}
+                </span>
+                <em>Slow down and take extra care.</em>
+              </span>
+              <button
+                type="button"
+                className="mp-warn-show"
+                onClick={() => setFocus({ id: `warn-${nearZone.zone.key}-${Date.now()}`, latitude: nearZone.zone.lat, longitude: nearZone.zone.lng })}
+              >
+                Show
+              </button>
+              <button
+                type="button"
+                className="mp-x"
+                aria-label="Dismiss warning"
+                onClick={() => setDismissedZone(nearZone.zone.key)}
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+          )}
+
+          {replayActive && (
+            <ReplayBar
+              startMs={replayInfo.start}
+              dayCount={replayInfo.count}
+              index={replayIndex}
+              onIndex={index => setReplay(current => ({ ...current, index, playing: false }))}
+              playing={replay.playing}
+              onPlay={playReplay}
+              speed={replay.speed}
+              onSpeed={speed => setReplay(current => ({ ...current, speed }))}
+              windowKey={replay.window}
+              onWindow={key => setReplay(current => ({ ...current, window: key }))}
+              strip={replayInfo.strip}
+              stats={{ reports: visible.length, hotspots: zones.length }}
+              shifted={Boolean(selected)}
+              onClose={toggleReplay}
+            />
+          )}
 
           {hover && previewStyle && hover.report.id !== selected?.id && (
             <ReportPreview report={hover.report} timeAgo={timeAgo} style={previewStyle} className="rp--float" />
@@ -1202,8 +1496,8 @@ export default function MapPage() {
 
           <div className="mp-top" aria-live="polite">
             <i className="mp-live" aria-hidden="true" />
-            <strong>{new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
-            <span>{RANGES.find(option => option.key === range)?.label}</span>
+            <strong>{replayActive ? dayLabel(replayEnd) : new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+            <span>{replayActive ? 'Replay' : RANGES.find(option => option.key === range)?.label}</span>
             <span className={zones.length ? 'is-hot' : ''}>
               {zones.length} {zones.length === 1 ? 'hotspot' : 'hotspots'}
             </span>
@@ -1305,6 +1599,32 @@ export default function MapPage() {
                     <dd className="numeric">{route.steps.length}</dd>
                   </div>
                 </dl>
+              )}
+
+              {route.state === 'ok' && warnOn && (
+                routeWarn.length > 0 ? (
+                  <div className="mp-routewarn" role="alert">
+                    <strong>
+                      <Icon name="warn" size={14} /> This route passes {routeWarn.length} accident-prone {routeWarn.length === 1 ? 'area' : 'areas'}
+                    </strong>
+                    <ul>
+                      {routeWarn.map(zone => (
+                        <li key={zone.key}>
+                          <button
+                            type="button"
+                            onClick={() => setFocus({ id: `route-warn-${zone.key}-${Date.now()}`, latitude: zone.lat, longitude: zone.lng })}
+                          >
+                            <i className={`mp-dot tier-${zone.tier}`} />
+                            <span>{zone.name}</span>
+                            <em>{TIER_LABEL[zone.tier]} · {zone.count} reports</em>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="ops-note">No accident-prone areas on this route.</p>
+                )
               )}
 
               {route.state === 'error' && <p className="ops-note">{route.message}</p>}
