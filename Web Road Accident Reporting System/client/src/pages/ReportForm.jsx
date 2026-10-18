@@ -111,8 +111,12 @@ export default function ReportForm() {
           try { await api.post(`/reports/${created.data.id}/evidence`, fd); } catch { failed.push(p.file.name); }
         }
         if (failed.length) {
-          alert(`Report submitted, but these files could not be uploaded: ${failed.join(', ')}. You can add them from the report page.`);
-          navigate(`/reports/${created.data.id}`);
+          navigate(`/reports/${created.data.id}`, {
+            state: {
+              noticeKind: 'error',
+              notice: `Report submitted, but these files could not be uploaded: ${failed.join(', ')}. You can add them with Upload below.`
+            }
+          });
           return;
         }
       }

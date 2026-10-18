@@ -42,6 +42,8 @@ export default function ReportsList() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState('');
+  const [exportError, setExportError] = useState('');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -106,6 +108,9 @@ export default function ReportsList() {
 
   // Exports are fetched with the auth header and saved as a blob so the token never appears in a URL.
   const downloadExport = async (format) => {
+    if (exporting) return;
+    setExporting(format);
+    setExportError('');
     try {
       const params = { format };
       if (status) params.status = status;
@@ -122,7 +127,9 @@ export default function ReportsList() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      alert('Export failed');
+      setExportError(`The ${format.toUpperCase()} export failed. Try again.`);
+    } finally {
+      setExporting('');
     }
   };
 
@@ -139,11 +146,13 @@ export default function ReportsList() {
             <p>{loading ? 'Loading…' : `${visible.length} ${visible.length === 1 ? 'report' : 'reports'}${status ? ` · ${statusLabel(status)}` : ''}`}</p>
           </div>
           <div className="rs-actions">
-            {user.role === 'admin' && <button type="button" className="rs-btn" onClick={() => downloadExport('csv')}>Export CSV</button>}
-            {user.role === 'admin' && <button type="button" className="rs-btn" onClick={() => downloadExport('pdf')}>Export PDF</button>}
+            {user.role === 'admin' && <button type="button" className="rs-btn" disabled={Boolean(exporting)} onClick={() => downloadExport('csv')}>{exporting === 'csv' ? 'Exporting…' : 'Export CSV'}</button>}
+            {user.role === 'admin' && <button type="button" className="rs-btn" disabled={Boolean(exporting)} onClick={() => downloadExport('pdf')}>{exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}</button>}
             {user.role === 'reporter' && <Link to="/reports/new" className="rs-btn rs-btn--primary">New report</Link>}
           </div>
         </div>
+
+        {exportError && <p className="rs-note rs-note--err" role="alert">{exportError}</p>}
 
         <label className="rs-search">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
