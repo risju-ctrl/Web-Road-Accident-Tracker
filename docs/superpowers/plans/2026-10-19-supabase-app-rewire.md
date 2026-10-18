@@ -146,7 +146,7 @@ Read-only requests only — this harness must never write:
 | `GET /api/reports/1` | admin |
 | `GET /api/reports/5` | admin |
 | `GET /api/reports/5/status-history` | admin |
-| `GET /api/reports/3/evidence` | admin |
+| `GET /api/reports/3/evidence/1` | admin |
 | `GET /api/reports` | reporter |
 | `GET /api/reports/2` | reporter |
 | `GET /api/reports/2` | officer |
@@ -155,14 +155,19 @@ Read-only requests only — this harness must never write:
 | `GET /api/notifications/unread-count` | reporter |
 | `GET /api/notifications?unread=1&page=2&limit=5` | reporter |
 
-Record for each: `{ url, status, body }`, where `body` is the parsed JSON (or the raw text for the CSV URL). A login that returns non-200 records `{ url, status, body }` rather than aborting, so a partial database still produces a usable baseline.
+Record for each: `{ url, status, body }`, where `body` is the parsed JSON (or the raw text for the CSV URL). A login that returns non-200 records `{ url, status, body }` rather than aborting, so a partial database still produces a usable baseline. Three details matter, all found while writing it:
+
+- **The signed JWT must never be recorded.** Every login issues a unique token (`jwtid: randomUUID()`), so it differs on every run and would break the comparison — and the baseline is committed, so a real token would leak into git. Record it as `<redacted>` and keep it in memory only.
+- **The evidence route streams the file from disk, not from the database**, so only its status is compared. The status still proves the database-backed authorization ran.
+- **Arrays of records that carry an `id` are compared by id, not by position.** Report 2 has two status changes in the same second (`changed_at` 16:14:08), and ties in `ORDER BY sh.changed_at DESC` have no guaranteed order.
 
 Comparison rule for `compare` mode (write it down as a comment, it is the reason the two drivers can agree):
 
 - Values containing `T` (datetime fields: `created_at`, `updated_at`, `read_at`, `changed_at`, `uploaded_at`, `verified_at`) compare **exactly**, byte for byte. An 8-hour offset is a failure — this is what proves Task 1 worked.
-- Values that are date-only compare on their first 10 characters (`YYYY-MM-DD`), because mysql2 returns `DATE` as a local-midnight `Date` and node-postgres as a UTC-midnight `Date`, so the same calendar day serialises as `2026-10-14T16:00:00.000Z` and `2026-10-15T00:00:00.000Z` respectively.
+- Values that are date-only (`accident_date`) compare as the server's local calendar day (`toLocaleDateString('en-CA')`), because mysql2 returns `DATE` as a local-midnight `Date` and node-postgres as a UTC-midnight `Date`, so the same calendar day serialises as `2026-10-14T16:00:00.000Z` and `2026-10-15T00:00:00.000Z` respectively. Comparing the first 10 characters would wrongly compare `2026-10-14` with `2026-10-15`.
 - `true`/`false` compares equal to `1`/`0` for boolean columns only (`is_active`, `is_read`).
-- Everything else compares exactly: numbers must be numbers (not `"5"`), nulls must stay nulls, array lengths must match.
+- The CSV export body is compared as its two header lines plus the sorted set of report references, because it renders `accident_date` through `Date.toString()`, which embeds the process time zone (`… GMT+0800 …` vs `… GMT+0000 …`). Same rows, different rendering.
+- Everything else compares exactly: numbers must be numbers (not `"5"`), nulls must stay nulls, array lengths must match, and arrays without ids keep their order.
 
 - [ ] **Step 2: Record the MySQL baseline**
 
@@ -171,7 +176,9 @@ Expected: exits 0, writes `tests/baseline-mysql.json`, and prints the request co
 
 - [ ] **Step 3: Sanity-check the baseline content**
 
-Open the file and confirm the entries that prove the DB really answered: `/api/users` status 200 with 3 users each carrying `is_active: 1`; `/api/summaries/dashboard/summary` with `total: 5`; `/api/notifications/unread-count` with a number, not a string; `/api/summaries/dashboard/stats?year=2026` with numeric `kpis.submitted.value`.
+Open the file and confirm the entries that prove the DB really answered: `/api/users` status 200 with 3 users each carrying `is_active: 1`; `/api/summaries/dashboard/summary` with `total: 5`; `/api/notifications/unread-count` with a number, not a string; `/api/summaries/dashboard/stats?year=2026` with numeric `kpis.submitted.value`. Confirm no field contains a JWT (`grep eyJ tests/baseline-mysql.json` must find nothing).
+
+Then prove the harness can actually fail: back up the baseline, edit one recorded `status` to `999`, run `compare` (it must report that difference and exit 1), restore the backup and run `compare` again (it must pass). A harness that passes against a wrong baseline proves nothing.
 
 Expected failure to fix here: if a login returns 403, the seed passwords in `.env` are wrong or the accounts are inactive — stop and ask the owner rather than changing the data.
 
