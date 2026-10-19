@@ -90,7 +90,7 @@ router.get('/dashboard/stats', async (req, res, next) => {
     let filter = '';
     const filterParams = [];
     if (typeId) { filter += ' AND r.accident_category_id = ?'; filterParams.push(typeId); }
-    if (location) { filter += ' AND r.location LIKE ?'; filterParams.push(`%${location}%`); }
+    if (location) { filter += ' AND r.location ILIKE ?'; filterParams.push(`%${location}%`); }
 
     const from = `${Math.min(year, compareYear)}-01-01`;
     const to = `${Math.max(year, compareYear) + 1}-01-01`;
@@ -125,7 +125,7 @@ router.get('/dashboard/stats', async (req, res, next) => {
       ORDER BY r.created_at ASC
       LIMIT 8
     `, filterParams);
-    const [yearRows] = await pool.query('SELECT DISTINCT YEAR(created_at) AS y FROM reports ORDER BY y DESC');
+    const [yearRows] = await pool.query('SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC');
 
     res.json({
       meta: { year, compareYear, scope, years: yearRows.map((r) => r.y), scopedTotal: scoped.length },
@@ -179,16 +179,18 @@ router.get('/reports/summaries', async (req, res, next) => {
     if (from) { dateFilter += ' AND r.created_at >= ?'; params.push(from); }
     if (to) { dateFilter += ' AND r.created_at <= ?'; params.push(to); }
 
+    // Period labels are produced by Postgres now; the weekly label uses the ISO week,
+    // where MySQL's YEARWEEK started weeks on Sunday.
     let groupBy = '';
     switch (period) {
-      case 'daily': groupBy = 'DATE(r.created_at)'; break;
-      case 'weekly': groupBy = 'YEARWEEK(r.created_at)'; break;
-      case 'annual': groupBy = 'YEAR(r.created_at)'; break;
-      default: groupBy = 'DATE_FORMAT(r.created_at, "%Y-%m")';
+      case 'daily': groupBy = 'r.created_at::date'; break;
+      case 'weekly': groupBy = "to_char(r.created_at, 'IYYY-IW')"; break;
+      case 'annual': groupBy = 'EXTRACT(YEAR FROM r.created_at)::int'; break;
+      default: groupBy = "to_char(r.created_at, 'YYYY-MM')";
     }
 
     const [rows] = await pool.query(`
-      SELECT ${groupBy} as period, COUNT(*) as count,
+      SELECT ${groupBy} as period, COUNT(*)::int as count,
         SUM(CASE WHEN r.status = 'submitted' THEN 1 ELSE 0 END) as submitted,
         SUM(CASE WHEN r.status = 'under_review' THEN 1 ELSE 0 END) as under_review,
         SUM(CASE WHEN r.status = 'needs_clarification' THEN 1 ELSE 0 END) as needs_clarification,
@@ -243,10 +245,11 @@ router.get('/reports/export', async (req, res, next) => {
     if (date_from) { query += ' AND r.accident_date >= ?'; params.push(date_from); }
     if (date_to) { query += ' AND r.accident_date <= ?'; params.push(date_to); }
     // The Analytics page counts by the year a report was submitted, so its export filters the same way.
-    if (exportYear) { query += ' AND YEAR(r.created_at) = ?'; params.push(exportYear); }
-    if (exportLocation) { query += ' AND r.location LIKE ?'; params.push(`%${exportLocation}%`); }
-    if (scope === 'verified') { query += ' AND r.verified_at IS NOT NULL AND r.status != "rejected"'; }
-    if (scope === 'unverified') { query += ' AND (r.verified_at IS NULL OR r.status = "rejected")'; }
+    if (exportYear) { query += ' AND EXTRACT(YEAR FROM r.created_at) = ?'; params.push(exportYear); }
+    if (exportLocation) { query += ' AND r.location ILIKE ?'; params.push(`%${exportLocation}%`); }
+    // Single quotes: Postgres reads double-quoted text as an identifier, not a string.
+    if (scope === 'verified') { query += " AND r.verified_at IS NOT NULL AND r.status != 'rejected'"; }
+    if (scope === 'unverified') { query += " AND (r.verified_at IS NULL OR r.status = 'rejected')"; }
     query += ' ORDER BY r.created_at DESC';
 
     const [reports] = await pool.query(query, params);

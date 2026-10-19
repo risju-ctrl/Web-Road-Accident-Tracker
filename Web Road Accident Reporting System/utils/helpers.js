@@ -4,8 +4,11 @@ export async function generateReportReference() {
   const year = new Date().getFullYear();
   const prefix = `RA-${year}-`;
   // Highest existing number for the year + 1, so deleting a row never causes a reused reference.
+  // substr, not substring: PostgreSQL has a second `substring(text, text)` that treats the
+  // second argument as a regular expression, and a bound `?` parameter arrives as text, so
+  // `substring` would read the position as a pattern and return null.
   const [rows] = await pool.query(
-    'SELECT MAX(CAST(SUBSTRING(report_reference, ?) AS UNSIGNED)) AS maxn FROM reports WHERE report_reference LIKE ?',
+    'SELECT MAX(CAST(SUBSTR(report_reference, ?) AS integer)) AS maxn FROM reports WHERE report_reference LIKE ?',
     [prefix.length + 1, `${prefix}%`]
   );
   const next = (Number(rows[0].maxn) || 0) + 1;

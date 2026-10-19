@@ -16,7 +16,7 @@ Role values in code: `reporter`, `admin`, `traffic_officer`.
 
 ## Product Purpose
 
-A web and mobile road accident reporting system (IT 305 course project, work period Oct 12–30 2026, submission Nov 2 2026). The public can file and follow reports; officials can review, verify, assign, investigate, and report on them. Success is a working end-to-end demo over a real API + MySQL database.
+A web and mobile road accident reporting system (IT 305 course project, work period Oct 12-30 2026, submission Nov 2 2026). The public can file and follow reports; officials can review, verify, assign, investigate, and report on them. Success is a working end-to-end demo over a real API + Postgres (Supabase) database.
 
 ## Positioning
 
@@ -24,11 +24,11 @@ A **public-submitted report is not an officially verified accident record** — 
 
 ## Operating Context
 
-- React + Vite client (`client/`), Express REST API (`/api/v1`), MySQL; single repo with Node backend.
+- React + Vite client (`client/`), Express REST API (`/api/v1`), Postgres (Supabase); single repo with Node backend.
 - Location/map work uses OpenStreetMap + Leaflet; routing uses OpenStreetMap Valhalla; emergency contacts dial the Philippine national emergency number 911 (PNP, BFP, EMS, NDRRMC, PCG, PAGASA).
 - Notifications are in-app (list + bell); email/push are stretch goals.
 - Evidence (photos) is fetched through the authenticated API with blob responses, never public URLs.
-- Demo is run locally (XAMPP MySQL + Node), with an optional mock mode for the admin dashboard (`VITE_USE_MOCK_DASHBOARD`).
+- Demo is run locally (Node, against the Supabase database), with an optional mock mode for the admin dashboard (`VITE_USE_MOCK_DASHBOARD`).
 
 ## Capabilities and Constraints
 

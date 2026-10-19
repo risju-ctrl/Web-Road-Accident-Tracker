@@ -21,8 +21,8 @@ if (missing.length) {
 for (const [name, email, role, phone, password] of accounts) {
   const hash = await bcrypt.hash(password, 10);
   await pool.query(
-    `INSERT INTO users (name, email, password_hash, role, phone, is_active) VALUES (?, ?, ?, ?, ?, 1)
-     ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = VALUES(role), is_active = 1`,
+    `INSERT INTO users (name, email, password_hash, role, phone, is_active) VALUES (?, ?, ?, ?, ?, true)
+     ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role, is_active = true`,
     [name, email, hash, role, phone]
   );
   console.log(`Seeded ${role}: ${email}`);

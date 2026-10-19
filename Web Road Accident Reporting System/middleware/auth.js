@@ -30,7 +30,7 @@ export const requireAuth = async (req, res, next) => {
     if (rows.length === 0) {
       return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
     }
-    if (rows[0].is_active !== 1) {
+    if (!rows[0].is_active) {
       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Account is inactive' } });
     }
     req.user = rows[0];
@@ -50,6 +50,6 @@ export const requireRole = (...roles) => {
 };
 
 export const isActive = (req, res, next) => {
-  if (req.user && req.user.is_active === 1) return next();
+  if (req.user && req.user.is_active) return next();
   return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Account is inactive' } });
 };
