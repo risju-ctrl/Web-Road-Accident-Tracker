@@ -13,9 +13,11 @@ const skip = process.env.DATABASE_URL ? false : 'DATABASE_URL is not set — the
 test('pg adapter keeps the mysql2 contract', { skip }, async () => {
   let createdId = null;
   try {
-    // 1. Placeholders are rewritten in order, not by regex index.
-    const [sum] = await pool.query('select (? + ?)::int as total', [1, 2]);
-    assert.equal(sum[0].total, 3);
+    // 1. Placeholders are rewritten in order. Concatenation proves the order: a reversed
+    // rewrite would return 'BA'. The ::text casts are needed because Postgres cannot infer
+    // a type for a bare parameter, unlike MySQL.
+    const [joined] = await pool.query('select (?::text || ?::text) as joined', ['A', 'B']);
+    assert.equal(joined[0].joined, 'AB');
 
     // 2. Inserts report insertId, and the row is really there.
     const [ins] = await pool.query(

@@ -16,6 +16,12 @@ const pool = new pg.Pool({
   // The connection is still encrypted.
   ssl: { rejectUnauthorized: false },
   max: 10,
+  // No session time zone is set here on purpose. MySQL ran with timezone=SYSTEM
+  // (Asia/Manila) and the summaries group reports by day and month in SQL, so the
+  // database's default time zone for this role is set to Asia/Manila instead: the
+  // connection pooler silently ignores a startup `options` parameter, and issuing
+  // `set time zone` from a pool 'connect' handler races the query the pool hands out.
+  // See the `set_app_timezone_to_manila` migration in the Supabase project.
   ...(useUrl
     ? { connectionString: process.env.DATABASE_URL }
     : {
@@ -30,16 +36,6 @@ const pool = new pg.Pool({
 // An idle client dropping its connection emits an error event; without a listener that
 // would take the whole server down.
 pool.on('error', (err) => console.error('database pool error:', err.message));
-
-// MySQL ran with its time zone set to SYSTEM, which is Asia/Manila on this machine, and
-// the summaries group reports by day/month/week in SQL. Postgres would default the
-// session to UTC, where a report filed at 00:30 Manila time belongs to the previous day
-// (and the previous month on the 1st). Every connection sets the same zone MySQL used.
-pool.on('connect', (client) => {
-  client.query("set time zone 'Asia/Manila'").catch((err) => {
-    console.error('could not set the session time zone:', err.message);
-  });
-});
 
 // MySQL codes are kept because models/Report.js retries on ER_DUP_ENTRY and
 // middleware/errorHandler.js maps both codes to HTTP responses.

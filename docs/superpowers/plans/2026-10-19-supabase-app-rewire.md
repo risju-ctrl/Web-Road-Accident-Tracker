@@ -42,7 +42,7 @@
 
 Affected columns (all `timestamptz`): `users.created_at`, `users.updated_at`, `accident_categories.created_at`, `reports.created_at`, `reports.updated_at`, `reports.verified_at`, `report_evidence.uploaded_at`, `report_status_history.changed_at`, `notifications.created_at`, `notifications.read_at`, `audit_logs.created_at`.
 
-- [ ] **Step 1: Record the wrong value first**
+- [x] **Step 1: Record the wrong value first**
 
 Run via MCP `execute_sql`:
 
@@ -52,7 +52,7 @@ select id, created_at from audit_logs where id = 75;
 
 Expected: `2026-10-19 00:25:03+00` — the local wall clock, stored as UTC. This is the value being corrected.
 
-- [ ] **Step 2: Re-anchor every timestamp column from local (+08) to a real instant**
+- [x] **Step 2: Re-anchor every timestamp column from local (+08) to a real instant**
 
 **Trap:** `users` and `reports` carry a `BEFORE UPDATE` trigger (`users_updated_at`, `reports_updated_at` → `set_updated_at()`) that overwrites `updated_at` with `now()` on any UPDATE, which destroys the re-anchored `updated_at` values. Drop both triggers first, restore `updated_at` afterwards from the MySQL truth (values below), then recreate them.
 
@@ -90,7 +90,7 @@ create trigger reports_updated_at before update on reports for each row execute 
 
 `NULL` values stay `NULL` (report 4's `verified_at` and `updated_at`).
 
-- [ ] **Step 3: Verify the corrected instants**
+- [x] **Step 3: Verify the corrected instants**
 
 ```sql
 select id, created_at from audit_logs where id = 75;
@@ -101,7 +101,7 @@ select id, created_at, updated_at from reports order by id;
 
 Expected: `audit_logs.id 75 → 2026-10-18 16:25:03+00` (00:25:03 on Oct 19, +08). `notifications` id 1 → `2026-10-15 13:39:00+00`, id 49 → `2026-10-18 16:16:03+00`. `users.created_at` → `2026-10-15 07:41:29+00`, `users.updated_at` → `2026-10-18 10:19:53+00`. `reports` 1 `updated_at` → `2026-10-15 07:44:59+00`, report 4 → both `NULL`, report 5 `updated_at` → `2026-10-18 16:25:03+00`. Report 4's `updated_at` being non-NULL means the trigger was not really dropped.
 
-- [ ] **Step 4: Verify row counts are unchanged**
+- [x] **Step 4: Verify row counts are unchanged**
 
 ```sql
 select (select count(*) from users) as u, (select count(*) from reports) as r,
@@ -122,7 +122,7 @@ Expected: `u 3, r 5, n 53, a 75`.
 - Consumes: the running app on MySQL (`config/db.js` still uses mysql2), `SEED_ADMIN_PASSWORD` / `SEED_OFFICER_PASSWORD` / `SEED_REPORTER_PASSWORD` from `.env`, and `GET /api/health` (`server.js:36`).
 - Produces: `node tests/smoke-api.mjs record` writes the baseline file; `node tests/smoke-api.mjs compare` re-runs the same requests against whatever database the app is currently configured for and exits non-zero listing the first differing endpoint. Task 4 and Task 5 depend on both modes.
 
-- [ ] **Step 1: Write the harness**
+- [x] **Step 1: Write the harness**
 
 `tests/smoke-api.mjs` must: spawn `node server.js` with `PORT=5099` in its environment, poll `GET http://localhost:5099/api/health` until it returns `{status:'ok'}` (30 s timeout, then fail with the child's stderr); then issue exactly these requests in this order, using a fake IP so the rate limiter at `server.js:41` is not tripped by the 6 login calls; then kill the child on exit.
 
@@ -169,12 +169,12 @@ Comparison rule for `compare` mode (write it down as a comment, it is the reason
 - The CSV export body is compared as its two header lines plus the sorted set of report references, because it renders `accident_date` through `Date.toString()`, which embeds the process time zone (`… GMT+0800 …` vs `… GMT+0000 …`). Same rows, different rendering.
 - Everything else compares exactly: numbers must be numbers (not `"5"`), nulls must stay nulls, array lengths must match, and arrays without ids keep their order.
 
-- [ ] **Step 2: Record the MySQL baseline**
+- [x] **Step 2: Record the MySQL baseline**
 
 Run: `node tests/smoke-api.mjs record`
 Expected: exits 0, writes `tests/baseline-mysql.json`, and prints the request count (23).
 
-- [ ] **Step 3: Sanity-check the baseline content**
+- [x] **Step 3: Sanity-check the baseline content**
 
 Open the file and confirm the entries that prove the DB really answered: `/api/users` status 200 with 3 users each carrying `is_active: 1`; `/api/summaries/dashboard/summary` with `total: 5`; `/api/notifications/unread-count` with a number, not a string; `/api/summaries/dashboard/stats?year=2026` with numeric `kpis.submitted.value`. Confirm no field contains a JWT (`grep eyJ tests/baseline-mysql.json` must find nothing).
 
@@ -182,7 +182,7 @@ Then prove the harness can actually fail: back up the baseline, edit one recorde
 
 Expected failure to fix here: if a login returns 403, the seed passwords in `.env` are wrong or the accounts are inactive — stop and ask the owner rather than changing the data.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add "Web Road Accident Reporting System/tests/smoke-api.mjs" "Web Road Accident Reporting System/tests/baseline-mysql.json"
@@ -206,7 +206,7 @@ git commit -m "test: capture MySQL API baseline before the Supabase switch"
   - `end() => Promise<void>` (used by `database/seed.js:30`).
 - Consumed by: all 11 existing `pool.query` call sites, unchanged.
 
-- [ ] **Step 1: Write the failing adapter test**
+- [x] **Step 1: Write the failing adapter test**
 
 `tests/db.adapter.test.js`, run with `node --test`. Skips itself with a printed notice when `DATABASE_URL` is unset (so `npm test` still works for the owner without Supabase credentials). Asserts:
 
@@ -249,12 +249,12 @@ await pool.query('delete from accident_categories where id = ?', [ins.insertId])
 
 Note: the test deliberately writes one row and deletes it (leaves an id gap in `accident_categories`) — that is the cheapest way to prove `insertId` and `affectedRows` against the real server.
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `node --test tests/db.adapter.test.js`
 Expected: FAIL — `pg` is not installed / `pool.query` is not a function.
 
-- [ ] **Step 3: Install `pg` and rewrite `config/db.js`**
+- [x] **Step 3: Install `pg` and rewrite `config/db.js`**
 
 Run: `npm install pg` (owner approval is part of accepting this plan).
 
@@ -270,7 +270,7 @@ Run: `npm install pg` (owner approval is part of accepting this plan).
 - `end()` forwards to `pool.end()`.
 - Do **not** register custom type parsers. node-postgres's defaults give `Date` objects for `date`/`timestamp`/`timestamptz` (serialised to ISO strings by Express) and strings for `numeric`/`bigint`/`time`, which is the shape the current client and the Task 2 baseline already expect.
 
-- [ ] **Step 4: Document the connection in `.env.example`**
+- [x] **Step 4: Document the connection in `.env.example`**
 
 Add below the existing `DB_*` lines, so both local MySQL and Supabase are describable:
 
@@ -282,11 +282,11 @@ DATABASE_URL=
 DB_PORT=5432
 ```
 
-- [ ] **Step 5: Point the app at Supabase (owner action)**
+- [x] **Step 5: Point the app at Supabase (owner action)**
 
 Ask the owner to set `DATABASE_URL` in `.env` to the session-pooler URI (`postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`) and to leave the `DB_*` lines in place for rollback. Do not create or edit `.env` yourself.
 
-- [ ] **Step 6: Run the adapter test against Supabase, and the existing suite**
+- [x] **Step 6: Run the adapter test against Supabase, and the existing suite**
 
 Run: `node --test tests/db.adapter.test.js`
 Expected: all assertions PASS, exits 0. If it reports a TLS or `tenant/user not found` error, the connection string is the wrong pooler host or the password is wrong — fix `.env` with the owner, do not retry blindly.
@@ -294,7 +294,7 @@ Expected: all assertions PASS, exits 0. If it reports a TLS or `tenant/user not 
 Then run: `npm test`
 Expected: PASS (`node --test tests/workflow.test.js` never touches the database).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add "Web Road Accident Reporting System/config/db.js" "Web Road Accident Reporting System/package.json" "Web Road Accident Reporting System/package-lock.json" "Web Road Accident Reporting System/.env.example" "Web Road Accident Reporting System/tests/db.adapter.test.js"
@@ -320,7 +320,7 @@ git commit -m "feat: talk to Supabase Postgres through a mysql2-compatible pg ad
 - Consumes: the adapter from Task 3 and the baseline from Task 2.
 - Produces: identical API responses on Supabase and MySQL. No signature changes anywhere; `is_active` becomes a real boolean through the API and `0|1` from old clients continues to be accepted.
 
-- [ ] **Step 1: Booleans: `is_active` and `is_read`**
+- [x] **Step 1: Booleans: `is_active` and `is_read`**
 
 - `middleware/auth.js:33` → `if (!rows[0].is_active) {`; line 53 → `if (req.user && req.user.is_active) return next();`
 - `routes/auth.js:40` → `if (!user.is_active) {`
@@ -330,14 +330,14 @@ git commit -m "feat: talk to Supabase Postgres through a mysql2-compatible pg ad
 
 Rationale for the shape: the API keeps serving `true|false`, which the client consumes by truthiness (`AdminUsers.jsx:235`, `Notifications.jsx:161`), and the client's `0|1` input is coerced at the route boundary where it is parsed.
 
-- [ ] **Step 2: Aggregates must stay numbers**
+- [x] **Step 2: Aggregates must stay numbers**
 
 - `models/AuditLog.js:13` → `SELECT COUNT(*)::int as total FROM audit_logs`
 - `routes/summaries.js:191` → `COUNT(*)::int as count`. Lines 192-199 stay **uncast**: MySQL already returned `SUM()` as a DECIMAL *string* (the recorded baseline has `"submitted":"1"`), so leaving Postgres's `bigint` as a string keeps the API byte-identical. `SUM` must *not* be cast — doing so silently changes the response type that `client/src/components/Charts.jsx:119` feeds straight to Recharts.
 
-- [ ] **Step 3: MySQL-only SQL expressions**
+- [x] **Step 3: MySQL-only SQL expressions**
 
-- `utils/helpers.js:8` → `SELECT MAX(CAST(SUBSTRING(report_reference FROM ?) AS integer)) AS maxn FROM reports WHERE report_reference LIKE ?` (`SUBSTRING(x, n)` becomes `substring(x from n)`; `UNSIGNED` → `integer`).
+- `utils/helpers.js:8` → `SELECT MAX(CAST(SUBSTR(report_reference, ?) AS integer)) AS maxn FROM reports WHERE report_reference LIKE ?`. **Corrected during execution:** the `substring(x from n)` written here does not work. The `?` is sent as `text`, and PostgreSQL then resolves `substring(text, text)` — the regular-expression form — treating the position as a pattern, so the query quietly returns `NULL` instead of the highest number. `substr(text, integer)` is the only unambiguous spelling. Nothing else could see this: the unit tests need no database and the read-only comparison never creates a report, so it first appeared in Step 5 as a `409 DUPLICATE_ENTRY` on every submit (the generator fell back to `RA-2026-000001`, which already existed).
 - `routes/summaries.js` group-by switch (lines 183-188):
   - `daily` → `r.created_at::date`
   - `weekly` → `to_char(r.created_at, 'IYYY-IW')` (ISO week; MySQL `YEARWEEK` used a Sunday-start week, so week labels shift — flag this to the owner, it is a labelling change, not a data change)
@@ -349,7 +349,7 @@ Rationale for the shape: the API keeps serving `true|false`, which the client co
 **Step 3b: two differences the smokesheet cannot see**
 
 - **`LIKE` is case-sensitive in Postgres and was case-insensitive in MySQL**, so every search driven by user input becomes `ILIKE`: `models/Report.js:174,176` (location filter, and the `q` search over reference/title/location) and `routes/summaries.js:93,247` (location filters). `utils/helpers.js:8` keeps `LIKE` — it matches a generated `RA-<year>-%` prefix whose case is fixed. Without this, searching `quezon` stops finding `Quezon City`, and no recorded baseline entry covers a lower-case search.
-- Session time zone: `config/db.js` sets `set time zone 'Asia/Manila'` on every connection, because MySQL ran with `timezone=SYSTEM` (Asia/Manila) and the summaries group by day/week/month in SQL. Left at UTC, a report filed at 00:30 Manila time counts as the previous day (and the previous month on the 1st). No current row crosses a boundary, so the comparison cannot catch this — it must be set deliberately. (`EXTRACT` yields `numeric`, which node-postgres returns as a string, and line 131 hands `r.y` straight to the client's year picker).
+- Session time zone: set once on the database role, `alter role postgres set timezone = 'Asia/Manila'` (migration `set_app_timezone_to_manila`), because MySQL ran with `timezone=SYSTEM` (Asia/Manila) and the summaries group by day/week/month in SQL. Left at UTC, a report filed at 00:30 Manila time counts as the previous day (and the previous month on the 1st). No current row crosses a boundary, so the comparison cannot catch this — it must be set deliberately. **Corrected during execution:** the per-connection approach planned here does not work through Supabase's connection pooler. A startup `options=-c timezone=...` is silently ignored (a row that reads `2026-10-15 15:44` came back as `07:44`), and issuing `set time zone` from a pool `connect` handler races the query the pool has already handed out (node-postgres emits a deprecation warning for exactly that). `config/db.js` now sets no session time zone at all and its comment points at the migration. Reverting is one statement, `alter role postgres reset timezone`. (`EXTRACT` yields `numeric`, which node-postgres returns as a string, and line 131 hands `r.y` straight to the client's year picker).
 - `routes/summaries.js:191-199` — no change beyond the `::int` casts from Step 2; `SUM(CASE WHEN …)` is portable.
 - `database/seed.js:24-26` →
 
@@ -362,25 +362,29 @@ SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role, is_active = tr
 
 (`users.email` carries the UNIQUE constraint; MySQL's `VALUES(col)` has no Postgres equivalent, `EXCLUDED` does.)
 
-- [ ] **Step 4: Run the comparison**
+- [x] **Step 4: Run the comparison**
 
 Run: `node tests/smoke-api.mjs compare`
-Expected: `PASS — 23/23 responses match tests/baseline-mysql.json`.
+Expected: `PASS — 26/26 responses match tests/baseline-mysql.json`. The baseline file records 26 responses, not the 23 estimated when this plan was written.
 
 If a response differs, read the diff rather than loosening the comparison rule from Task 2. `created_at` and friends must match exactly (Task 1 re-anchored them); aggregate fields must be numbers on both sides; boolean columns are the only `true|false` vs `1|0` tolerance.
 
-- [ ] **Step 5: Exercise the write paths by hand (the harness is read-only)**
+Two `note:` lines are printed and are not failures, and the rule behind them was narrowed rather than loosened. `/api/audit-logs` returns the newest 50 rows and unread notifications are paged five at a time, and neither query breaks ties on `created_at`: one second holds 15 audit rows and another six notifications. When a window boundary falls inside such a group, each database may return a different member of it (MySQL behaved the same way; this is pre-existing, not a porting artefact). Records are therefore matched by `id`, and a window that drifts is accepted only if the rows that left and the rows that arrived carry the same timestamp. A window that comes back with a different set of rows fails, as the planted-difference check in Task 2 requires.
 
-With the server running against Supabase: log in as the reporter, submit a report (expect `201`, a `RA-2026-0000NN` reference, and a `submitted` status), as admin verify it, as officer move it to `in_progress` then `resolved`, upload a small image as evidence, then mark a notification read.
+The comparison also caught one row the data copy had altered: `audit_logs.details` for row 56 had gained a `"verification_notes": null` key MySQL never stored (the app passes `undefined` for an empty note and `JSON.stringify` drops the key; the copy turned that into `null`). Migration `restore_audit_log_56_details_from_mysql` put the row back, and the whole column now matches MySQL key for key. `tests/smoke-api.mjs` also parses a JSON string before comparing it with an object, because MySQL returned `details` from a text column as a JSON *string* while Supabase's `jsonb` arrives already parsed — `client/src/components/AuditDetails.jsx` accepts an object, a string or a twice-encoded string, so this is a tolerated representation change, not a regression.
 
-Expected: every step returns 200/201; the report's `status_history` grows by one row per change; `notifications` gains rows; a duplicate reference is retried rather than surfacing as a 500. Then confirm in Supabase, and note that these test rows now exist in both databases.
+- [x] **Step 5: Exercise the write paths by hand (the harness is read-only)**
 
-- [ ] **Step 6: Run the existing test suite**
+With the server running against Supabase: log in as the reporter, submit a report (expect `201`, a `RA-2026-00000N` reference, and a `submitted` status), as admin move it `submitted → under_review → verified → assigned`, as officer `assigned → in_progress → resolved` with findings, upload a small image as evidence, then mark a notification read. The admin user form's `is_active: 0` / `1` toggle was exercised the same way, and a lower-case `GET /api/users?is_active=1` filter with it. Done on 2026-10-19: every step returned 200 or 201, the new report's `status_history` held one row per change, `notifications` grew and one was marked read, and the evidence row and its file both landed. The step found the `substr` bug recorded in Step 3, which no other check could reach.
+
+**Changed from the plan:** the test rows were not left in place. They were deleted back to the MySQL counts (`reports` 5, `notifications` 53, `audit_logs` 75, `report_evidence` 2, `report_status_history` 28) by migration `remove_write_path_check_rows`, the id sequences were reset, and the three uploaded test files were removed, so `compare` still passes against the MySQL baseline afterwards. The four files that belong to the migrated evidence rows were left untouched (they were never copied into the repository — uploads stay in `uploads/`, which is git-ignored). The driver script lives outside the repository at `%TEMP%\opencode\sdd-supabase-rewire\write-paths.mjs`, so nothing was added to the app.
+
+- [x] **Step 6: Run the existing test suite**
 
 Run: `npm test`
 Expected: PASS (the workflow test does not touch the database).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A "Web Road Accident Reporting System"
@@ -402,7 +406,7 @@ git commit -m "fix: port MySQL-only SQL and boolean handling to Postgres"
 
 This task is gated on the owner explicitly confirming, after Task 4, that the Supabase-backed app is the one they want to keep.
 
-- [ ] **Step 1: Update the docs**
+- [x] **Step 1: Update the docs**
 
 `PRODUCT.md:19` "a real API + MySQL database" → "a real API + Postgres (Supabase) database". `README.md`: replace the XAMPP/MySQL setup steps with the Supabase connection steps (`DATABASE_URL`, `npm install`, `npm run seed`, `npm run dev`) and add one line stating the rollback path (restore `DB_*` + `npm install mysql2`). `.env.example`: **done differently on purpose** — the `DB_*` block stays, because `config/db.js` still reads it as the fallback and it documents the rollback path; only the comment and `DB_PORT` were added.
 

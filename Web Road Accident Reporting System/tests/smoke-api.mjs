@@ -128,7 +128,7 @@ function localDay(value) {
 
 // Returns a human-readable difference, or null when the two values count as equal.
 const hasId = (row) => Boolean(row) && typeof row === 'object' && !Array.isArray(row) && 'id' in row;
-const byId = (a, b) => (a.id > b.id ? 1 : a.id < b.id ? -1 : 0);
+const asJson = (text) => { try { return JSON.parse(text); } catch (e) { return null; } };
 
 function difference(path, a, b) {
   const key = path.slice(path.lastIndexOf('.') + 1).replace(/\[\d+\]$/, '');
@@ -143,17 +143,47 @@ function difference(path, a, b) {
   if (DATE_ONLY_KEYS.includes(key) && typeof a === 'string' && typeof b === 'string') {
     return localDay(a) === localDay(b) ? null : `${path}: date-only ${localDay(a)} vs ${localDay(b)}`;
   }
+  // MySQL returned a jsonb/text JSON column as a JSON string ("{"a":1}"); Postgres returns
+  // the same value as an object. The client accepts either form (see AuditDetails.jsx), so
+  // parse the string before comparing, which also makes the comparison ignore key order.
+  if (typeof a === 'string' && b !== null && typeof b === 'object') a = asJson(a) ?? a;
+  if (typeof b === 'string' && a !== null && typeof a === 'object') b = asJson(b) ?? b;
   if (typeof a !== typeof b) return `${path}: type ${typeof a} vs ${typeof b} (${JSON.stringify(a)} vs ${JSON.stringify(b)})`;
   if (Array.isArray(a)) {
     if (a.length !== b.length) return `${path}: array length ${a.length} vs ${b.length}`;
-    // Two rows can share a sort key (report 2 has two status changes in the same
-    // second), and ties have no guaranteed order, so arrays of records with ids are
-    // compared by id instead of by position.
-    const [x, y] = a.every(hasId) && b.every(hasId)
-      ? [[...a].sort(byId), [...b].sort(byId)]
-      : [a, b];
+    // Rows can share a sort key and none of these queries breaks the tie (15 audit-log rows
+    // share one second), so records with ids are matched by id, not by position.
+    if (a.every(hasId) && b.every(hasId)) {
+      const freshById = new Map(b.map((row) => [row.id, row]));
+      const baselineIds = new Set(a.map((row) => row.id));
+      const gone = a.filter((row) => !freshById.has(row.id));
+      const added = b.filter((row) => !baselineIds.has(row.id));
+      if (gone.length || added.length) {
+        // Some lists are windows over rows with tied timestamps (the audit log is the newest
+        // 50 rows, unread notifications are paged 5 at a time), and a window boundary can
+        // fall inside a group of equal timestamps, where each database is free to return a
+        // different member of the group. That is only acceptable when the rows that left and
+        // the rows that arrived share their timestamp, which proves it is tie order.
+        const sortKey = (row) => row.created_at ?? row.updated_at;
+        const goneKeys = gone.map(sortKey).sort();
+        const addedKeys = added.map(sortKey).sort();
+        const tieOrder = goneKeys.length === addedKeys.length
+          && goneKeys.every((key, i) => key !== undefined && key === addedKeys[i]);
+        const goneIds = gone.map((row) => row.id).join(', ');
+        const addedIds = added.map((row) => row.id).join(', ');
+        if (!tieOrder) return `${path}: rows differ by more than tie order — out: id ${goneIds}, in: id ${addedIds}`;
+        console.log(`note: ${path} drifted inside a tie group — out: id ${goneIds}, in: id ${addedIds}`);
+      }
+      for (const row of a) {
+        const other = freshById.get(row.id);
+        if (!other) continue;
+        const d = difference(`${path}[id ${row.id}]`, row, other);
+        if (d) return d;
+      }
+      return null;
+    }
     for (let i = 0; i < a.length; i++) {
-      const d = difference(`${path}[${i}]`, x[i], y[i]);
+      const d = difference(`${path}[${i}]`, a[i], b[i]);
       if (d) return d;
     }
     return null;
