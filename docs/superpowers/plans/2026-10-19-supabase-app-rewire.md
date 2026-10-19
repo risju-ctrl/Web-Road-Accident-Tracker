@@ -404,7 +404,7 @@ git commit -m "fix: port MySQL-only SQL and boolean handling to Postgres"
 
 **Interfaces:** none.
 
-This task is gated on the owner explicitly confirming, after Task 4, that the Supabase-backed app is the one they want to keep.
+This task is gated on the owner explicitly confirming, after Task 4, that the Supabase-backed app is the one they want to keep. On 2026-10-19 the owner confirmed the Supabase app is the one to keep but asked to leave `mysql2` installed for now, so Steps 2 to 4 stay open and the rollback path stays usable.
 
 - [x] **Step 1: Update the docs**
 
