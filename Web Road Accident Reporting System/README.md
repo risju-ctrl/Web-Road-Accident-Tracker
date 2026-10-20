@@ -55,6 +55,14 @@ on-duty officer with a recent position, and shows distance and open cases. The a
 choosing someone other than the nearest is recorded in the audit log (`was_nearest`, `distance_m`).
 Reports without a map position cannot be ranked by distance, so officers are listed by fewest open cases.
 
+### Live officer map
+
+Admins see a map of on-duty officers at the top of the **Officer** tab (`GET /api/officers/live`,
+refreshed every 10 seconds). A green blinking dot is an officer whose position is under
+`OFFICER_LIVE_WINDOW_MIN` minutes old (default 5); a grey dot is on duty but last seen longer ago.
+Each officer's browser re-sends its position every 30 seconds while the app is open. The map needs
+`VITE_MAPBOX_TOKEN` in `client/.env`, the same token the Map page uses.
+
 ## Going back to MySQL
 
 The local MySQL database is still installed and still holds its own copy of the data. It is no

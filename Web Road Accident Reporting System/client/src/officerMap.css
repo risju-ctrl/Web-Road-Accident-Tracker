@@ -1,0 +1,36 @@
+/* Live officer map (admin, Officer tab). */
+.officer-live { margin-bottom: 1rem; }
+.officer-live__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.officer-live__head h2 { margin: 0; font-size: 1.05rem; }
+.officer-live__sub { margin: .2rem 0 0; font-size: .8125rem; color: hsl(var(--text-3)); }
+.officer-live__legend { display: flex; align-items: center; gap: 1rem; font-size: .8125rem; color: hsl(var(--text-2)); }
+.officer-live__legend span { display: inline-flex; align-items: center; gap: 6px; }
+.officer-live__body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; }
+.officer-live__map { border-radius: 12px; overflow: hidden; min-height: 320px; }
+.officer-live__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; max-height: 460px; overflow-y: auto; }
+.officer-live__none, .officer-live__empty { font-size: .875rem; color: hsl(var(--text-3)); padding: .5rem 0; }
+.officer-row { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid hsl(var(--line) / .1); background: hsl(var(--surface-2)); color: hsl(var(--text-1)); cursor: pointer; font: inherit; }
+.officer-row:hover { border-color: hsl(var(--line) / .24); }
+.officer-row span { display: flex; flex-direction: column; min-width: 0; }
+.officer-row b { font-weight: 500; font-size: .875rem; }
+.officer-row small { font-size: .75rem; color: hsl(var(--text-3)); }
+@media (max-width: 900px) { .officer-live__body { grid-template-columns: 1fr; } .officer-live__list { max-height: 240px; } }
+
+/* Legend and list dots */
+.officer-legend { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; background: hsl(var(--text-3)); }
+.officer-legend--live { background: hsl(var(--level-none)); animation: officer-dot 1.6s ease-in-out infinite; }
+
+/* Map marker. Mapbox moves the outer element, so the blinking is on the ring inside it. */
+.officer-pin { position: relative; width: 20px; height: 20px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.officer-pin__dot { position: absolute; inset: 4px; border-radius: 50%; background: hsl(var(--text-3)); border: 2px solid #0b1220; }
+.officer-pin__ring { position: absolute; inset: 0; border-radius: 50%; background: hsl(var(--level-none) / .55); opacity: 0; }
+.officer-pin.is-live .officer-pin__dot { background: hsl(var(--level-none)); }
+.officer-pin.is-live .officer-pin__ring { animation: officer-ping 1.6s ease-out infinite; }
+.officer-pin__name { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11px; line-height: 1.4; padding: 1px 6px; border-radius: 6px; background: rgba(11, 18, 32, .85); color: #fff; pointer-events: none; }
+
+@keyframes officer-ping { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(3); opacity: 0; } }
+@keyframes officer-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .officer-legend--live { animation: none; }
+  .officer-pin.is-live .officer-pin__ring { animation: none; opacity: .5; transform: scale(1.8); }
+}

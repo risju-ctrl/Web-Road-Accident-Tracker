@@ -8,15 +8,17 @@ import api from '../services/api';
 // The browser only reports a position while the app is open, and only over https (or
 // localhost) after the officer allows it.
 
-const SEND_EVERY_MS = 60 * 1000;
-// About 50 m. A smaller move than this is not worth a request.
-const MOVED_DEGREES = 0.0005;
+// The position is re-sent this often even when the officer is standing still, so the admin's
+// live map can tell "parked and online" from "closed the app".
+const SEND_EVERY_MS = 30 * 1000;
 
 export default function OfficerDutyToggle() {
   const [onDuty, setOnDuty] = useState(null); // null until the saved state loads
   const [problem, setProblem] = useState('');
   const [updatedAt, setUpdatedAt] = useState(null);
-  const lastSent = useRef({ at: 0, lat: null, lng: null });
+  // Latest position the browser reported. A desktop browser may report only once while the
+  // officer stays put, so a timer re-sends this instead of waiting for the next fix.
+  const latest = useRef(null);
 
   useEffect(() => {
     api.get('/traffic-officer/location')
@@ -28,32 +30,31 @@ export default function OfficerDutyToggle() {
     if (!onDuty) return undefined;
     if (!navigator.geolocation) { setProblem('This browser cannot share a location.'); return undefined; }
 
+    latest.current = null;
+    const send = () => {
+      if (!latest.current) return;
+      api.put('/traffic-officer/location', latest.current)
+        .then((res) => setUpdatedAt(res.data.location_updated_at))
+        .catch(() => {});
+    };
+
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setProblem('');
-        const { latitude, longitude } = pos.coords;
-        const last = lastSent.current;
-        const due = Date.now() - last.at >= SEND_EVERY_MS;
-        const moved = last.lat === null
-          || Math.abs(latitude - last.lat) > MOVED_DEGREES
-          || Math.abs(longitude - last.lng) > MOVED_DEGREES;
-        // Send on the first fix, then when a minute has passed and the officer has moved.
-        if (last.lat !== null && !(due && moved)) return;
-        lastSent.current = { at: Date.now(), lat: latitude, lng: longitude };
-        api.put('/traffic-officer/location', { latitude, longitude })
-          .then((res) => setUpdatedAt(res.data.location_updated_at))
-          .catch(() => { lastSent.current.at = 0; });
+        const first = latest.current === null;
+        latest.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        if (first) send(); // do not make the officer wait 30 s to appear on the map
       },
       (err) => setProblem(err.code === 1 ? 'Location is blocked in this browser.' : 'Could not get your location.'),
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 }
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+    const timer = setInterval(send, SEND_EVERY_MS);
+    return () => { navigator.geolocation.clearWatch(watchId); clearInterval(timer); };
   }, [onDuty]);
 
   const toggle = async () => {
     const next = !onDuty;
     setOnDuty(next);
-    if (next) lastSent.current = { at: 0, lat: null, lng: null };
     try {
       await api.put('/traffic-officer/location', { on_duty: next });
     } catch {

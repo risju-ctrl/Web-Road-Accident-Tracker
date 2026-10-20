@@ -85,6 +85,11 @@ export function compareReports(incoming, existing, opts = {}) {
   return { match: false, distance_m: null, reason: 'location' };
 }
 
+// An officer counts as "live" on the map while their last position is this fresh. The
+// officer's browser sends a position every 30 seconds, so a few minutes of silence means
+// the page was closed or the connection dropped.
+export const LIVE_WINDOW_MIN = Number(process.env.OFFICER_LIVE_WINDOW_MIN) || 5;
+
 export const LOCATION_STALE_MIN = Number(process.env.OFFICER_LOCATION_STALE_MIN) || 120;
 
 // An officer's shared location is only trustworthy for a while. After that they have

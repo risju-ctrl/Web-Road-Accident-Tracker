@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import OfficerMap from '../components/OfficerMap';
 
 export default function OfficerReports() {
   const { user } = useAuth();
@@ -16,6 +17,7 @@ export default function OfficerReports() {
 
   return (
     <div className="container">
+      {user?.role === 'admin' && <OfficerMap />}
       <div className="page-title"><h1>My Assigned Reports</h1></div>
 
       <div className="card">
