@@ -125,3 +125,10 @@ test('isStale treats a missing timestamp as stale', () => {
   assert.equal(isStale(null, NOW), true);
   assert.equal(isStale(minsAgo(10), NOW), false);
 });
+
+test('live means a position a few minutes old; older is only "last seen"', async () => {
+  const { LIVE_WINDOW_MIN } = await import('../utils/geo.js');
+  assert.equal(LIVE_WINDOW_MIN, 5);
+  assert.equal(isStale(minsAgo(2), NOW, LIVE_WINDOW_MIN), false);
+  assert.equal(isStale(minsAgo(6), NOW, LIVE_WINDOW_MIN), true);
+});

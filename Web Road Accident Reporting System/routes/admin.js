@@ -6,7 +6,7 @@ import { AuditLog } from '../models/AuditLog.js';
 import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit, transitionError } from '../utils/helpers.js';
-import { hasCoords, rankOfficers, pickNearest } from '../utils/geo.js';
+import { hasCoords, rankOfficers, pickNearest, isStale, LIVE_WINDOW_MIN } from '../utils/geo.js';
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
@@ -35,6 +35,32 @@ router.get('/audit-logs', async (req, res, next) => {
     const { page, limit, userId, action, entityType } = req.query;
     const result = await AuditLog.list({ page, limit, userId, action, entityType });
     res.json(result);
+  } catch (err) { next(err); }
+});
+
+// Officers who are on duty and have shared a position, for the live map. `live` means the
+// position is only minutes old; older ones are still returned so the map can show them as
+// "last seen". seconds_ago is worked out here so the map does not depend on the browser clock.
+router.get('/officers/live', async (req, res, next) => {
+  try {
+    const now = Date.now();
+    const onDuty = (await User.listForDispatch()).filter((o) => o.on_duty !== false);
+    const located = onDuty.filter(hasCoords);
+    res.json({
+      on_duty: onDuty.length,
+      not_sharing: onDuty.length - located.length,
+      officers: located.map((o) => ({
+        id: o.id,
+        name: o.name,
+        phone: o.phone,
+        latitude: Number(o.latitude),
+        longitude: Number(o.longitude),
+        open_cases: o.open_cases,
+        location_updated_at: o.location_updated_at,
+        seconds_ago: o.location_updated_at ? Math.max(0, Math.round((now - new Date(o.location_updated_at).getTime()) / 1000)) : null,
+        live: !isStale(o.location_updated_at, now, LIVE_WINDOW_MIN)
+      }))
+    });
   } catch (err) { next(err); }
 });
 

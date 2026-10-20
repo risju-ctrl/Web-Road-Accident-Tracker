@@ -1364,3 +1364,20 @@ main.container:has(.ops-page) { max-width: none; padding: 0; display: flex; }
 .duty-toggle.is-on { color: hsl(var(--text-1)); border-color: hsl(var(--level-none) / .5); }
 .duty-toggle.is-on i { background: hsl(var(--level-none)); }
 .duty-toggle.has-problem i { background: hsl(var(--level-severe)); }
+
+/* Pulsing dot while on duty: green = sharing location, red = on duty but no location. */
+@keyframes duty-pulse {
+  0%   { box-shadow: 0 0 0 0 hsl(var(--level-none) / .6); }
+  70%  { box-shadow: 0 0 0 8px hsl(var(--level-none) / 0); }
+  100% { box-shadow: 0 0 0 0 hsl(var(--level-none) / 0); }
+}
+@keyframes duty-pulse-problem {
+  0%   { box-shadow: 0 0 0 0 hsl(var(--level-severe) / .6); }
+  70%  { box-shadow: 0 0 0 8px hsl(var(--level-severe) / 0); }
+  100% { box-shadow: 0 0 0 0 hsl(var(--level-severe) / 0); }
+}
+.duty-toggle.is-on i { animation: duty-pulse 1.6s ease-out infinite; }
+.duty-toggle.has-problem i { animation-name: duty-pulse-problem; }
+@media (prefers-reduced-motion: reduce) {
+  .duty-toggle.is-on i { animation: none; }
+}
