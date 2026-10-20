@@ -105,3 +105,7 @@
 .rd-file-chip { display: flex; flex-direction: column; gap: 2px; margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: hsl(var(--surface-2)); border: 1px solid hsl(var(--line) / .1); }
 .rd-file-chip b { font-size: 0.875rem; font-weight: 500; overflow-wrap: anywhere; }
 .rd-file-chip small { font-size: 0.75rem; color: hsl(var(--text-3)); }
+
+/* Marks the officer the system would send in the assign list. */
+.rd-nearest { font-style: normal; font-size: 0.6875rem; font-weight: 600; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: hsl(var(--accent) / .18); color: hsl(var(--accent)); text-transform: uppercase; letter-spacing: .04em; }
+

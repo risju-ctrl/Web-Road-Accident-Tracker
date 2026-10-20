@@ -15,13 +15,53 @@ router.use(requireAuth);
 
 router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
   try {
-    const report = await Report.create(req.body, req.user.id);
-    await logAudit(req.user.id, 'CREATE_REPORT', 'report', report.id, req, { report_reference: report.report_reference });
+    // duplicate_of / confirm_distinct are the reporter's answer to the duplicate warning
+    // below; they are not report fields.
+    const { duplicate_of, confirm_distinct, ...data } = req.body;
+    Report.validate(data);
+
+    // Same time and same place as a report that already exists = probably the same accident.
+    const matches = await Report.findPossibleDuplicates(data, req.user.id);
+    let linkedTo = null;
+    if (matches.length > 0) {
+      const own = matches.find((m) => m.own);
+      if (own) {
+        // Re-sending your own report only creates clutter. Editing it is the way to add detail.
+        return res.status(409).json({ error: {
+          code: 'DUPLICATE_OWN_REPORT',
+          message: `You already submitted this accident as ${own.report_reference}. Open that report to edit it or add photos.`,
+          duplicates: [own]
+        } });
+      }
+      if (duplicate_of) {
+        // Trust only a report the server itself considers a match.
+        const target = matches.find((m) => m.id === Number(duplicate_of));
+        if (!target) {
+          return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'That report does not match this accident.' } });
+        }
+        linkedTo = target;
+      } else if (!confirm_distinct) {
+        return res.status(409).json({ error: {
+          code: 'POSSIBLE_DUPLICATE',
+          message: 'This looks like an accident that was already reported.',
+          duplicates: matches
+        } });
+      }
+    }
+
+    const report = await Report.create(data, req.user.id, { duplicateOf: linkedTo ? linkedTo.id : null });
+    await logAudit(req.user.id, 'CREATE_REPORT', 'report', report.id, req, {
+      report_reference: report.report_reference,
+      ...(linkedTo ? { duplicate_of: linkedTo.report_reference } : {}),
+      ...(matches.length > 0 && !linkedTo ? { confirmed_distinct_from: matches.map((m) => m.report_reference) } : {})
+    });
     await Notification.create({
       userId: req.user.id,
       reportId: report.id,
       event: 'report.submitted',
-      message: `Your report ${report.report_reference} has been submitted.`
+      message: linkedTo
+        ? `Your report ${report.report_reference} has been submitted and linked to ${linkedTo.report_reference}, the same accident.`
+        : `Your report ${report.report_reference} has been submitted.`
     });
     res.status(201).json(report);
   } catch (err) { next(err); }
@@ -43,7 +83,8 @@ router.get('/:id', async (req, res, next) => {
     if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     const evidence = await Evidence.findByReport(report.id);
     const history = await StatusHistory.findByReport(report.id);
-    res.json({ ...report, evidence, status_history: history });
+    const duplicates = req.user.role === 'admin' ? await Report.listDuplicates(report.id) : [];
+    res.json({ ...report, evidence, status_history: history, duplicates });
   } catch (err) { next(err); }
 });
 

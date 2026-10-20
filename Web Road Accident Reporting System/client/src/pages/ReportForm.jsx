@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
@@ -22,6 +22,12 @@ export default function ReportForm() {
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState([]); // [{ file, url }]
   const [locating, setLocating] = useState(false);
+  // Matches the server found for what the reporter just typed: other people's reports
+  // about what looks like the same accident (dupes), or the reporter's own (ownDupe).
+  const [dupes, setDupes] = useState(null);
+  const [ownDupe, setOwnDupe] = useState(null);
+  // Changing the form makes any earlier warning out of date.
+  useEffect(() => { setDupes(null); setOwnDupe(null); }, [form]);
   const photoUrls = useRef([]);
   photoUrls.current = photos.map((p) => p.url);
   useEffect(() => () => photoUrls.current.forEach((u) => URL.revokeObjectURL(u)), []);
@@ -92,12 +98,13 @@ export default function ReportForm() {
     }
   }, [id, isEdit]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // `answer` is the reporter's reply to the duplicate warning:
+  // { duplicate_of: id } (same accident) or { confirm_distinct: true } (different accident).
+  const submit = async (answer = {}) => {
     setError('');
     setSaving(true);
     try {
-      const data = { ...form };
+      const data = { ...form, ...answer };
       Object.keys(data).forEach(k => data[k] === '' && delete data[k]);
       if (isEdit) {
         await api.patch(`/reports/${id}`, data);
@@ -122,10 +129,23 @@ export default function ReportForm() {
       }
       navigate('/reports');
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Save failed');
+      const apiError = err.response?.data?.error;
+      if (apiError?.code === 'POSSIBLE_DUPLICATE') {
+        setDupes(apiError.duplicates || []);
+      } else if (apiError?.code === 'DUPLICATE_OWN_REPORT') {
+        setOwnDupe(apiError.duplicates?.[0] || null);
+        setError(apiError.message);
+      } else {
+        setError(apiError?.message || 'Save failed');
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    submit();
   };
 
   if (loading) return <div className="container">Loading...</div>;
@@ -136,7 +156,12 @@ export default function ReportForm() {
         <h1>{isEdit ? 'Edit Report' : 'New Accident Report'}</h1>
       </div>
       <div className="card">
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="alert alert-error">
+            {error}
+            {ownDupe && <> <Link to={`/reports/${ownDupe.id}`}>Open {ownDupe.report_reference}</Link></>}
+          </div>
+        )}
         <form onSubmit={handleSubmit}>
           <div className="form-row">
             <div className="form-group">
@@ -171,7 +196,7 @@ export default function ReportForm() {
           </div>
           <div className="form-group">
             <button type="button" className="btn btn-secondary" onClick={useMyLocation} disabled={locating}>{locating ? 'Locating...' : 'Use my current location'}</button>
-            <small style={{ marginLeft: '.75rem' }}>Fills latitude and longitude. You can also type them in.</small>
+            <small style={{ marginLeft: '.75rem' }}>Fills latitude and longitude. You can also type them in. A map position lets us spot duplicate reports and send the nearest officer.</small>
           </div>
           <div className="form-row">
             <div className="form-group">
@@ -239,6 +264,33 @@ export default function ReportForm() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {dupes && dupes.length > 0 && (
+            <div className="alert alert-info" role="alert">
+              <b>This looks like an accident that was already reported.</b>
+              <p style={{ margin: '.4rem 0' }}>These reports are close to your place and time. If one is the same accident, add yours to it so the team handles it once.</p>
+              <ul style={{ listStyle: 'none', margin: '0 0 .75rem', padding: 0, display: 'grid', gap: '.5rem' }}>
+                {dupes.map((d) => (
+                  <li key={d.id} style={{ display: 'flex', gap: '.75rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <span>
+                      <b>{d.report_reference}</b> · {d.category_name || 'Uncategorized'} · {d.location}
+                      <br />
+                      <small>
+                        {String(d.accident_date).slice(0, 10)} {d.accident_time ? String(d.accident_time).slice(0, 5) : ''}
+                        {' · '}{String(d.status).replace('_', ' ')}
+                        {' · '}{d.distance_m !== null && d.distance_m !== undefined ? `${d.distance_m} m from your pin` : 'same place'}
+                      </small>
+                    </span>
+                    <button type="button" className="btn btn-primary" disabled={saving} onClick={() => submit({ duplicate_of: d.id })}>
+                      Same accident, add mine
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => submit({ confirm_distinct: true })}>
+                This is a different accident, submit anyway
+              </button>
             </div>
           )}
           <div style={{ display: 'flex', gap: '1rem' }}>

@@ -48,6 +48,19 @@ const STATUS_COPY = {
 
 const EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+// One line under an officer's name in the assign list: distance, how old the position is, workload.
+function officerMeta(o) {
+  const parts = [];
+  if (o.distance_m !== null && o.distance_m !== undefined) {
+    parts.push(o.distance_m < 1000 ? `${o.distance_m} m away` : `${(o.distance_m / 1000).toFixed(1)} km away`);
+    if (o.stale) parts.push('position is old');
+  } else if (!o.has_location) {
+    parts.push('location not shared');
+  }
+  if (!o.on_duty) parts.push('off duty');
+  parts.push(`${o.open_cases} open case${o.open_cases === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
 const errMsg = (err, fallback) => err?.response?.data?.error?.message || fallback;
 
 export default function ReportDetail() {
@@ -63,6 +76,8 @@ export default function ReportDetail() {
   const [officers, setOfficers] = useState(null); // null while loading, [] when there are none
   const [officersFailed, setOfficersFailed] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  // Officers ranked by distance to this report: null while loading, { failed } on error.
+  const [dispatch, setDispatch] = useState(null);
   const [pickedOfficer, setPickedOfficer] = useState(null);
   const [assignError, setAssignError] = useState('');
   const location = useLocation();
@@ -149,7 +164,20 @@ export default function ReportDetail() {
     }
   };
 
-  const openAssign = () => { setAssignError(''); setPickedOfficer(null); setNotice(null); setAssignOpen(true); };
+  const openAssign = () => {
+    setAssignError('');
+    setPickedOfficer(null);
+    setNotice(null);
+    setDispatch(null);
+    setAssignOpen(true);
+    api.get(`/reports/${id}/nearest-officers`)
+      .then((r) => {
+        setDispatch(r.data);
+        // The nearest officer is preselected; the admin can still choose anyone else.
+        if (r.data.nearest_id) setPickedOfficer(r.data.nearest_id);
+      })
+      .catch(() => setDispatch({ failed: true, officers: [] }));
+  };
 
   const submitFindings = async (findings) => {
     setStatusLoading(true);
@@ -347,6 +375,18 @@ export default function ReportDetail() {
                 const o = (officers || []).find((x) => x.id === report.assigned_to);
                 return <Fact label="Assigned to" sub={o?.email}>{o ? o.name : `Officer #${report.assigned_to}`}</Fact>;
               })()}
+              {report.duplicate_of && (
+                <Fact label="Same accident as" sub="Reported earlier. The original is the one to investigate.">
+                  {user.role === 'admin' ? <Link to={`/reports/${report.duplicate_of}`}>{report.duplicate_of_reference}</Link> : report.duplicate_of_reference}
+                </Fact>
+              )}
+              {user.role === 'admin' && report.duplicates?.length > 0 && (
+                <Fact label="Duplicate reports" sub="Other people reported this accident too.">
+                  {report.duplicates.map((d, i) => (
+                    <span key={d.id}>{i > 0 && ', '}<Link to={`/reports/${d.id}`}>{d.report_reference}</Link></span>
+                  ))}
+                </Fact>
+              )}
               {report.verified_by && <Fact label="Verified by" sub={report.verified_at ? new Date(report.verified_at).toLocaleString() : ''}>Admin #{report.verified_by}</Fact>}
             </dl>
             {(report.verification_notes || report.findings) && (
@@ -497,31 +537,54 @@ export default function ReportDetail() {
           <p className="rd-muted" style={{ marginBottom: 12 }}>
             Choose the traffic officer who will investigate {report.report_reference || `report #${report.id}`}. They will be notified.
           </p>
-          {officers === null ? (
-            <p className="rd-muted">Loading officers…</p>
-          ) : officers.length === 0 ? (
+          {report.duplicate_of && (
+            <p className="rd-muted" style={{ marginBottom: 12 }}>
+              This report is a duplicate of {report.duplicate_of_reference}. Assign an officer to the original and reject this one as a duplicate.
+            </p>
+          )}
+          {dispatch === null ? (
+            <p className="rd-muted">Finding the nearest officers…</p>
+          ) : dispatch.officers.length === 0 ? (
             <p className="rd-muted">
-              {officersFailed ? 'Could not load the officers. Close this and try again.' : 'There are no active traffic officers yet.'}{' '}
-              {!officersFailed && <Link to="/admin/users">Add one under Users</Link>}
+              {dispatch.failed ? 'Could not load the officers. Close this and try again.' : 'There are no active traffic officers yet.'}{' '}
+              {!dispatch.failed && <Link to="/admin/users">Add one under Users</Link>}
             </p>
           ) : (
-            <ul className="rd-officers" role="radiogroup" aria-label="Traffic officers">
-              {officers.map((o) => (
-                <li key={o.id}>
-                  <label className={`rd-officer${pickedOfficer === o.id ? ' is-on' : ''}`}>
-                    <input type="radio" name="officer" checked={pickedOfficer === o.id} onChange={() => setPickedOfficer(o.id)} />
-                    <span><b>{o.name}</b><small>{o.email}</small></span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+            <>
+              {!dispatch.report_has_location && (
+                <p className="rd-muted" style={{ marginBottom: 8 }}>
+                  This report has no map position, so distances cannot be worked out. Officers are listed by fewest open cases.
+                </p>
+              )}
+              {dispatch.report_has_location && !dispatch.nearest_id && (
+                <p className="rd-muted" style={{ marginBottom: 8 }}>
+                  No on-duty officer has shared a recent location, so nobody can be called the nearest.
+                </p>
+              )}
+              <ul className="rd-officers" role="radiogroup" aria-label="Traffic officers">
+                {dispatch.officers.map((o) => (
+                  <li key={o.id}>
+                    <label className={`rd-officer${pickedOfficer === o.id ? ' is-on' : ''}`}>
+                      <input type="radio" name="officer" checked={pickedOfficer === o.id} onChange={() => setPickedOfficer(o.id)} />
+                      <span>
+                        <b>{o.name}{o.id === dispatch.nearest_id && <em className="rd-nearest">Nearest</em>}</b>
+                        <small>{officerMeta(o)}</small>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              {dispatch.nearest_id && pickedOfficer !== null && pickedOfficer !== dispatch.nearest_id && (
+                <p className="rd-muted" style={{ marginBottom: 8 }}>This is not the nearest officer. The choice is recorded in the audit log.</p>
+              )}
+            </>
           )}
           {assignError && <p className="rd-assign-err" role="alert">{assignError}</p>}
           <div className="rd-modal-actions">
             <button type="button" className="rd-btn" disabled={statusLoading} onClick={() => setAssignOpen(false)}>Cancel</button>
             <button type="button" className="rd-btn rd-btn--primary" disabled={statusLoading || pickedOfficer === null}
               onClick={() => handleAssign(pickedOfficer)}>
-              {statusLoading ? 'Assigning…' : 'Assign officer'}
+              {statusLoading ? 'Assigning…' : pickedOfficer !== null && pickedOfficer === dispatch?.nearest_id ? 'Assign nearest officer' : 'Assign officer'}
             </button>
           </div>
         </Modal>

@@ -52,6 +52,37 @@ export const User = {
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, params);
     return this.findById(id);
   },
+  // Active officers with the position they last shared and how many cases they carry.
+  async listForDispatch() {
+    const [rows] = await pool.query(
+      `SELECT u.id, u.name, u.email, u.phone, u.latitude, u.longitude, u.location_updated_at, u.on_duty,
+              (SELECT COUNT(*)::int FROM reports r
+                WHERE r.assigned_to = u.id AND r.status IN ('assigned', 'in_progress')) AS open_cases
+       FROM users u
+       WHERE u.role = 'traffic_officer' AND u.is_active = true`
+    );
+    return rows;
+  },
+  async getLocation(id) {
+    const [rows] = await pool.query(
+      'SELECT latitude, longitude, location_updated_at, on_duty FROM users WHERE id = ?', [id]
+    );
+    return rows[0];
+  },
+  // Only the fields that were sent change, so toggling duty does not wipe the position.
+  async setLocation(id, { latitude, longitude, on_duty }) {
+    const fields = [];
+    const params = [];
+    if (latitude !== undefined && longitude !== undefined) {
+      fields.push('latitude = ?', 'longitude = ?', 'location_updated_at = NOW()');
+      params.push(latitude, longitude);
+    }
+    if (on_duty !== undefined) { fields.push('on_duty = ?'); params.push(on_duty); }
+    if (fields.length === 0) return this.getLocation(id);
+    params.push(id);
+    await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, params);
+    return this.getLocation(id);
+  },
   async remove(id) {
     const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
     return result.affectedRows > 0;

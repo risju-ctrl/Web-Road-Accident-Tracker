@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import { generateReportReference } from '../utils/helpers.js';
+import { compareReports } from '../utils/geo.js';
 
 const STATUS_ORDER = ['submitted','under_review','needs_clarification','verified','assigned','in_progress','resolved','rejected'];
 
@@ -52,7 +53,7 @@ function throwValidation(problems) {
 }
 
 export const Report = {
-  async create(data, reporterId) {
+  async create(data, reporterId, { duplicateOf = null } = {}) {
     const problems = validateReport(data);
     if (problems) throwValidation(problems);
     // The reference is derived from the highest existing number, so two simultaneous
@@ -61,9 +62,9 @@ export const Report = {
       const report_reference = await generateReportReference();
       try {
         const [result] = await pool.query(
-          `INSERT INTO reports (report_reference, reporter_id, accident_category_id, title, description, accident_date, accident_time, location, latitude, longitude, vehicle_type, injury_status, severity, vehicles_involved, injuries, fatalities, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
-          [report_reference, reporterId, data.accident_category_id, data.title, data.description, data.accident_date, data.accident_time, data.location, data.latitude, data.longitude, data.vehicle_type, data.injury_status, data.severity, data.vehicles_involved, data.injuries, data.fatalities]
+          `INSERT INTO reports (report_reference, reporter_id, accident_category_id, title, description, accident_date, accident_time, location, latitude, longitude, vehicle_type, injury_status, severity, vehicles_involved, injuries, fatalities, status, duplicate_of)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?)`,
+          [report_reference, reporterId, data.accident_category_id, data.title, data.description, data.accident_date, data.accident_time, data.location, data.latitude, data.longitude, data.vehicle_type, data.injury_status, data.severity, data.vehicles_involved, data.injuries, data.fatalities, duplicateOf]
         );
         return this.findById(result.insertId);
       } catch (err) {
@@ -72,12 +73,67 @@ export const Report = {
       }
     }
   },
+  // Throws the same ValidationError as create() without writing anything, so the route can
+  // report a bad form before it talks about duplicates.
+  validate(data) {
+    const problems = validateReport(data);
+    if (problems) throwValidation(problems);
+  },
+  // Reports that look like the same accident as `data`: same time window and same place.
+  // Rejected reports are ignored (the accident was not real or was already dealt with),
+  // and so are reports that are themselves duplicates, so a link always points at the
+  // original. Returns the closest matches first.
+  async findPossibleDuplicates(data, reporterId) {
+    const day = String(data.accident_date).slice(0, 10);
+    // Day +/- 1 only narrows the rows; the exact time window is checked in compareReports.
+    const [rows] = await pool.query(
+      `SELECT r.id, r.report_reference, r.reporter_id, r.status, r.location, r.latitude, r.longitude,
+              r.accident_date, r.accident_time, ac.name as category_name
+       FROM reports r
+       LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+       WHERE r.status <> 'rejected' AND r.duplicate_of IS NULL
+         AND r.accident_date BETWEEN ?::date - 1 AND ?::date + 1
+       ORDER BY r.created_at DESC
+       LIMIT 500`,
+      [day, day]
+    );
+    const matches = [];
+    for (const row of rows) {
+      const result = compareReports(data, row);
+      if (!result.match) continue;
+      matches.push({
+        id: row.id,
+        report_reference: row.report_reference,
+        category_name: row.category_name,
+        location: row.location,
+        accident_date: row.accident_date,
+        accident_time: row.accident_time,
+        status: row.status,
+        distance_m: result.distance_m,
+        own: row.reporter_id === reporterId
+      });
+    }
+    matches.sort((a, b) => (a.distance_m ?? Infinity) - (b.distance_m ?? Infinity));
+    return matches.slice(0, 5);
+  },
+  async listDuplicates(id) {
+    const [rows] = await pool.query(
+      `SELECT r.id, r.report_reference, r.status, r.created_at, u.name as reporter_name
+       FROM reports r JOIN users u ON r.reporter_id = u.id
+       WHERE r.duplicate_of = ? ORDER BY r.created_at`,
+      [id]
+    );
+    return rows;
+  },
   async findById(id) {
     const [rows] = await pool.query(
-      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name
+      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name,
+              orig.report_reference as duplicate_of_reference,
+              (SELECT COUNT(*)::int FROM reports d WHERE d.duplicate_of = r.id) as duplicate_count
        FROM reports r
        JOIN users u ON r.reporter_id = u.id
        LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+       LEFT JOIN reports orig ON r.duplicate_of = orig.id
        WHERE r.id = ?`,
       [id]
     );
@@ -85,10 +141,13 @@ export const Report = {
   },
   async findByReference(ref) {
     const [rows] = await pool.query(
-      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name
+      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name,
+              orig.report_reference as duplicate_of_reference,
+              (SELECT COUNT(*)::int FROM reports d WHERE d.duplicate_of = r.id) as duplicate_count
        FROM reports r
        JOIN users u ON r.reporter_id = u.id
        LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+       LEFT JOIN reports orig ON r.duplicate_of = orig.id
        WHERE r.report_reference = ?`,
       [ref]
     );
@@ -179,10 +238,12 @@ function buildReportQuery(user, filters = {}) {
   }
   let query = `
     SELECT r.*, u.name as reporter_name, u.email as reporter_email,
-           ac.name as category_name
+           ac.name as category_name,
+           orig.report_reference as duplicate_of_reference
     FROM reports r
     JOIN users u ON r.reporter_id = u.id
     LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+    LEFT JOIN reports orig ON r.duplicate_of = orig.id
   `;
   if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
   query += ' ORDER BY r.created_at DESC';
