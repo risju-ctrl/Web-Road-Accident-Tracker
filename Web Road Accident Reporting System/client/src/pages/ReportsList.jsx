@@ -191,7 +191,7 @@ export default function ReportsList() {
                     <button type="button" className={`rs-card${selected?.id === r.id ? ' on' : ''}`} onClick={() => setSelectedId(r.id)} aria-pressed={selected?.id === r.id}>
                       <span className="rs-card-top">
                         <b>{r.report_reference}</b>
-                        <span className={`badge badge-${r.status}`}>{statusLabel(r.status)}</span>
+                        <span className={`badge badge-${r.status}`}>{statusLabel(r.status)}</span>{r.duplicate_of && <span className="badge" title={`Same accident as ${r.duplicate_of_reference}`}>Duplicate</span>}
                       </span>
                       <span className="rs-card-title">{r.title}</span>
                       <span className="rs-card-loc">{r.location}</span>

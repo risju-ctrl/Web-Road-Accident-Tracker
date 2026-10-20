@@ -1357,3 +1357,10 @@ main.container:has(.ops-page) { max-width: none; padding: 0; display: flex; }
   .ops-filter { flex: 1 1 100%; }
   .ops-filter select { width: 100%; min-width: 0; }
 }
+
+/* On/off duty switch in the toolbar (traffic officers only). */
+.duty-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid hsl(var(--line) / .2); background: transparent; color: hsl(var(--text-2)); font-size: 0.8125rem; cursor: pointer; }
+.duty-toggle i { width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--text-3)); }
+.duty-toggle.is-on { color: hsl(var(--text-1)); border-color: hsl(var(--level-none) / .5); }
+.duty-toggle.is-on i { background: hsl(var(--level-none)); }
+.duty-toggle.has-problem i { background: hsl(var(--level-severe)); }

@@ -1,8 +1,10 @@
 import express from 'express';
 import { Report } from '../models/Report.js';
+import { User } from '../models/User.js';
 import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit, transitionError } from '../utils/helpers.js';
+import { hasCoords, toCoord } from '../utils/geo.js';
 
 const router = express.Router();
 router.use(requireAuth, requireRole('traffic_officer', 'admin'));
@@ -28,6 +30,31 @@ async function notifyStatusChange(report, oldStatus, newStatus, actorId, notes) 
     await Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message });
   }
 }
+
+// The officer's browser shares where they are, so the admin can be shown who is nearest
+// to a new report. Only the officer's own position can be set here.
+router.get('/location', requireRole('traffic_officer'), async (req, res, next) => {
+  try {
+    res.json(await User.getLocation(req.user.id));
+  } catch (err) { next(err); }
+});
+
+router.put('/location', requireRole('traffic_officer'), async (req, res, next) => {
+  try {
+    const { latitude, longitude, on_duty } = req.body;
+    const update = {};
+    if (latitude !== undefined || longitude !== undefined) {
+      const point = { latitude: toCoord(latitude), longitude: toCoord(longitude) };
+      if (!hasCoords(point)) {
+        return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Latitude and longitude must be real coordinates' } });
+      }
+      update.latitude = point.latitude;
+      update.longitude = point.longitude;
+    }
+    if (on_duty !== undefined) update.on_duty = on_duty === true || on_duty === 'true' || Number(on_duty) === 1;
+    res.json(await User.setLocation(req.user.id, update));
+  } catch (err) { next(err); }
+});
 
 router.get('/reports', async (req, res, next) => {
   try {

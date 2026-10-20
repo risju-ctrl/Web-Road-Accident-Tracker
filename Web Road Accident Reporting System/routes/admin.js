@@ -6,6 +6,7 @@ import { AuditLog } from '../models/AuditLog.js';
 import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit, transitionError } from '../utils/helpers.js';
+import { hasCoords, rankOfficers, pickNearest } from '../utils/geo.js';
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
@@ -34,6 +35,26 @@ router.get('/audit-logs', async (req, res, next) => {
     const { page, limit, userId, action, entityType } = req.query;
     const result = await AuditLog.list({ page, limit, userId, action, entityType });
     res.json(result);
+  } catch (err) { next(err); }
+});
+
+// Officers ranked for a report: nearest first. The assign screen preselects the first one.
+router.get('/reports/:id/nearest-officers', async (req, res, next) => {
+  try {
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+    const ranked = rankOfficers(await User.listForDispatch(), report);
+    const nearest = pickNearest(ranked);
+    res.json({
+      report_has_location: hasCoords(report),
+      nearest_id: nearest ? nearest.id : null,
+      // Officers' raw coordinates stay on the server; the screen only needs the distance.
+      officers: ranked.map((o) => ({
+        id: o.id, name: o.name, email: o.email, phone: o.phone,
+        distance_m: o.distance_m, has_location: hasCoords(o), stale: o.stale,
+        on_duty: o.on_duty !== false, open_cases: o.open_cases, location_updated_at: o.location_updated_at
+      }))
+    });
   } catch (err) { next(err); }
 });
 
@@ -170,6 +191,7 @@ router.patch('/reports/:id/verify', async (req, res, next) => {
     }
     const oldStatus = report.status;
     let updated;
+    let assignmentAudit = null;
     if (status === 'assigned') {
       const { assignedTo } = req.body;
       if (!assignedTo) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'assignedTo required' } });
@@ -178,6 +200,16 @@ router.patch('/reports/:id/verify', async (req, res, next) => {
         return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'Choose an active traffic officer' } });
       }
       updated = await Report.assign(report.id, officer.id, req.user.id);
+      // Record how the choice compares with the nearest officer, so an override is visible in the audit log.
+      const ranked = rankOfficers(await User.listForDispatch(), report);
+      const picked = ranked.find((o) => o.id === officer.id);
+      const nearest = pickNearest(ranked);
+      assignmentAudit = {
+        assigned_to: officer.id,
+        distance_m: picked ? picked.distance_m : null,
+        nearest_officer_id: nearest ? nearest.id : null,
+        was_nearest: nearest ? nearest.id === officer.id : null
+      };
       // Notify assigned officer
       await Notification.create({
         userId: officer.id,
@@ -188,7 +220,7 @@ router.patch('/reports/:id/verify', async (req, res, next) => {
     } else {
       updated = await Report.updateStatus(report.id, status, req.user.id, { notes: verification_notes || reason });
     }
-    await logAudit(req.user.id, 'VERIFY_REPORT', 'report', report.id, req, { old_status: report.status, new_status: status, verification_notes });
+    await logAudit(req.user.id, 'VERIFY_REPORT', 'report', report.id, req, { old_status: report.status, new_status: status, verification_notes, ...assignmentAudit });
     await notifyStatusChange(report, oldStatus, status, req.user.id, verification_notes);
     res.json(updated);
   } catch (err) { next(err); }

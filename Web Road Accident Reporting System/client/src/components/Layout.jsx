@@ -4,6 +4,7 @@ import NotificationBell from './NotificationBell';
 import ThemeToggle from './ThemeToggle';
 import UserMenu from './UserMenu';
 import DesktopWindow from './DesktopWindow';
+import OfficerDutyToggle from './OfficerDutyToggle';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', roles: ['reporter', 'admin', 'traffic_officer'] },
@@ -39,6 +40,7 @@ export default function Layout() {
         ))}
       </nav>
       <div className="rw-tools">
+        {user?.role === 'traffic_officer' && <OfficerDutyToggle />}
         <ThemeToggle />
         <NotificationBell />
         <UserMenu />
