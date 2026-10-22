@@ -16,6 +16,16 @@ const pool = new pg.Pool({
   // The connection is still encrypted.
   ssl: { rejectUnauthorized: false },
   max: 10,
+  // Opening a connection to a remote database costs several round trips (TCP, TLS,
+  // login), seconds on a long-distance link. node-postgres closes idle connections
+  // after 10 s by default, which made the first request after a short pause as slow
+  // as a cold start. Keep them for 5 min; the heartbeat below keeps a couple warm.
+  idleTimeoutMillis: 5 * 60 * 1000,
+  // Do not hang forever when the database is unreachable.
+  connectionTimeoutMillis: 15000,
+  // TCP keep-alive stops routers and the pooler from silently dropping a quiet socket.
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
   // No session time zone is set here on purpose. MySQL ran with timezone=SYSTEM
   // (Asia/Manila) and the summaries group reports by day and month in SQL, so the
   // database's default time zone for this role is set to Asia/Manila instead: the
@@ -59,14 +69,47 @@ async function query(sql, params = []) {
   try {
     const result = await pool.query(text, params);
     if (result.command === 'SELECT') return [result.rows, result.fields];
-    return [{ insertId: result.rows[0] ? result.rows[0].id : null, affectedRows: result.rowCount }, result.fields];
+    // `rows` holds whatever a RETURNING clause produced, so a write can hand back the
+    // row it touched without a second SELECT (one fewer round trip).
+    return [{ insertId: result.rows[0] ? result.rows[0].id : null, affectedRows: result.rowCount, rows: result.rows }, result.fields];
   } catch (err) {
     if (SQLSTATE_TO_MYSQL[err.code]) err.code = SQLSTATE_TO_MYSQL[err.code];
     throw err;
   }
 }
 
+// Opens a few connections up front and keeps them used, so a request never has to wait
+// for a new connection. Call once when the server starts. The timer is unref'd so it
+// never keeps a script or test process alive.
+const HOT_CONNECTIONS = Math.max(1, Number(process.env.DB_WARM_CONNECTIONS) || 4);
+const HEARTBEAT_MS = 30 * 1000;
+let heartbeat = null;
+
+async function ping() {
+  // Concurrent queries need separate clients, so this touches HOT_CONNECTIONS of them.
+  // 4 covers the widest fan-out in the app (3 parallel queries on the report page).
+  await Promise.all(Array.from({ length: HOT_CONNECTIONS }, () => pool.query('select 1')));
+}
+
+async function warm() {
+  const started = Date.now();
+  try {
+    await ping();
+    console.log(`database warm: ${HOT_CONNECTIONS} connection(s) ready in ${Date.now() - started} ms`);
+  } catch (err) {
+    console.error('database warm-up failed:', err.message);
+  }
+  if (!heartbeat) {
+    heartbeat = setInterval(() => ping().catch((err) => console.error('database heartbeat failed:', err.message)), HEARTBEAT_MS);
+    heartbeat.unref();
+  }
+}
+
 export default {
   query,
-  end: () => pool.end()
+  warm,
+  end: () => {
+    if (heartbeat) clearInterval(heartbeat);
+    return pool.end();
+  }
 };

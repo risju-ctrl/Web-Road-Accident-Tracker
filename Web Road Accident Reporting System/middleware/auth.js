@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
+import { getCachedUser, cacheUser } from '../utils/userCache.js';
 
 // Token ids invalidated by logout. In-memory, so a server restart clears it.
 // shortcut: move to a DB table if the API ever runs more than one process
@@ -26,14 +27,20 @@ export const requireAuth = async (req, res, next) => {
     if (decoded.jti && blockedTokenIds.has(decoded.jti)) {
       return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Session has been logged out' } });
     }
-    const [rows] = await pool.query('SELECT id, name, email, role, phone, is_active FROM users WHERE id = ?', [decoded.id]);
-    if (rows.length === 0) {
-      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
+    // Served from memory for a few seconds; see utils/userCache.js for when it is refreshed.
+    let user = getCachedUser(decoded.id);
+    if (!user) {
+      const [rows] = await pool.query('SELECT id, name, email, role, phone, is_active FROM users WHERE id = ?', [decoded.id]);
+      if (rows.length === 0) {
+        return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
+      }
+      user = rows[0];
+      cacheUser(decoded.id, user);
     }
-    if (!rows[0].is_active) {
+    if (!user.is_active) {
       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Account is inactive' } });
     }
-    req.user = rows[0];
+    req.user = user;
     req.token = token;
     next();
   } catch (err) {

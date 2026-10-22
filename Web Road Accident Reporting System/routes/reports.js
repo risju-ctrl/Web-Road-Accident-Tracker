@@ -50,19 +50,22 @@ router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
     }
 
     const report = await Report.create(data, req.user.id, { duplicateOf: linkedTo ? linkedTo.id : null });
-    await logAudit(req.user.id, 'CREATE_REPORT', 'report', report.id, req, {
-      report_reference: report.report_reference,
-      ...(linkedTo ? { duplicate_of: linkedTo.report_reference } : {}),
-      ...(matches.length > 0 && !linkedTo ? { confirmed_distinct_from: matches.map((m) => m.report_reference) } : {})
-    });
-    await Notification.create({
-      userId: req.user.id,
-      reportId: report.id,
-      event: 'report.submitted',
-      message: linkedTo
-        ? `Your report ${report.report_reference} has been submitted and linked to ${linkedTo.report_reference}, the same accident.`
-        : `Your report ${report.report_reference} has been submitted.`
-    });
+    // The audit entry and the notification do not depend on each other.
+    await Promise.all([
+      logAudit(req.user.id, 'CREATE_REPORT', 'report', report.id, req, {
+        report_reference: report.report_reference,
+        ...(linkedTo ? { duplicate_of: linkedTo.report_reference } : {}),
+        ...(matches.length > 0 && !linkedTo ? { confirmed_distinct_from: matches.map((m) => m.report_reference) } : {})
+      }),
+      Notification.create({
+        userId: req.user.id,
+        reportId: report.id,
+        event: 'report.submitted',
+        message: linkedTo
+          ? `Your report ${report.report_reference} has been submitted and linked to ${linkedTo.report_reference}, the same accident.`
+          : `Your report ${report.report_reference} has been submitted.`
+      })
+    ]);
     res.status(201).json(report);
   } catch (err) { next(err); }
 });
@@ -81,9 +84,12 @@ router.get('/:id', async (req, res, next) => {
     if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
     if (req.user.role === 'reporter' && report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
-    const evidence = await Evidence.findByReport(report.id);
-    const history = await StatusHistory.findByReport(report.id);
-    const duplicates = req.user.role === 'admin' ? await Report.listDuplicates(report.id) : [];
+    // Three independent lookups: run them together, not one after another.
+    const [evidence, history, duplicates] = await Promise.all([
+      Evidence.findByReport(report.id),
+      StatusHistory.findByReport(report.id),
+      req.user.role === 'admin' ? Report.listDuplicates(report.id) : []
+    ]);
     res.json({ ...report, evidence, status_history: history, duplicates });
   } catch (err) { next(err); }
 });
@@ -98,13 +104,15 @@ router.patch('/:id', requireRole('reporter', 'admin'), async (req, res, next) =>
       if (!['submitted','needs_clarification'].includes(report.status)) return res.status(422).json({ error: { code: 'INVALID_STATUS', message: 'Cannot edit in current status' } });
     }
     const updated = await Report.update(report.id, req.body, req.user);
-    await logAudit(req.user.id, 'UPDATE_REPORT', 'report', report.id, req, req.body);
-    await Notification.create({
-      userId: report.reporter_id,
-      reportId: report.id,
-      event: 'report.updated',
-      message: `Your report ${report.report_reference} was updated${isOwner ? '' : ' by an administrator'}.`
-    });
+    await Promise.all([
+      logAudit(req.user.id, 'UPDATE_REPORT', 'report', report.id, req, req.body),
+      Notification.create({
+        userId: report.reporter_id,
+        reportId: report.id,
+        event: 'report.updated',
+        message: `Your report ${report.report_reference} was updated${isOwner ? '' : ' by an administrator'}.`
+      })
+    ]);
     // Supplying the requested information itself moves the report back to Under Review.
     if (isOwner && report.status === 'needs_clarification') {
       const backUnderReview = await Report.updateStatus(report.id, 'under_review', req.user.id, {

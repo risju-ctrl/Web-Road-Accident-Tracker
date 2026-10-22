@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import bcrypt from 'bcryptjs';
+import { invalidateUser } from '../utils/userCache.js';
 
 export const User = {
   async findByEmail(email) {
@@ -50,6 +51,8 @@ export const User = {
     if (fields.length === 0) return this.findById(id);
     params.push(id);
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, params);
+    // Role / active flag changes must apply on the very next request.
+    invalidateUser(id);
     return this.findById(id);
   },
   // Active officers with the position they last shared and how many cases they carry.
@@ -85,6 +88,7 @@ export const User = {
   },
   async remove(id) {
     const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+    invalidateUser(id);
     return result.affectedRows > 0;
   },
   async verifyPassword(user, password) {

@@ -1,0 +1,203 @@
+diff --git a/Web Road Accident Reporting System/config/db.js b/Web Road Accident Reporting System/config/db.js
+index e5447ef..c6e5233 100644
+--- a/Web Road Accident Reporting System/config/db.js	
++++ b/Web Road Accident Reporting System/config/db.js	
+@@ -16,6 +16,12 @@ const pool = new pg.Pool({
+   // The connection is still encrypted.
+   ssl: { rejectUnauthorized: false },
+   max: 10,
++  // A new connection to Supabase costs several network round trips (TCP + TLS + login).
++  // The pg default closes idle connections after 10 s, so a page that is opened after a
++  // short pause paid that cost again. Keep them for 5 minutes and keep the sockets alive.
++  idleTimeoutMillis: 5 * 60 * 1000,
++  keepAlive: true,
++  keepAliveInitialDelayMillis: 10000,
+   // No session time zone is set here on purpose. MySQL ran with timezone=SYSTEM
+   // (Asia/Manila) and the summaries group reports by day and month in SQL, so the
+   // database's default time zone for this role is set to Asia/Manila instead: the
+@@ -66,6 +72,9 @@ async function query(sql, params = []) {
+   }
+ }
+ 
++// Open the first connection at startup so the first request after `npm run dev` is not slow.
++pool.query('select 1').catch((err) => console.error('database warm-up failed:', err.message));
++
+ export default {
+   query,
+   end: () => pool.end()
+diff --git a/Web Road Accident Reporting System/database/migrations/005_postgres_indexes.sql b/Web Road Accident Reporting System/database/migrations/005_postgres_indexes.sql
+new file mode 100644
+index 0000000..d5173c3
+--- /dev/null
++++ b/Web Road Accident Reporting System/database/migrations/005_postgres_indexes.sql	
+@@ -0,0 +1,18 @@
++-- Postgres (Supabase) indexes. Migration 003 was written for MySQL and the Postgres schema
++-- created in Supabase does not add indexes on foreign keys on its own, so every filter, join
++-- and sort below was a full table scan. Safe to run more than once. Run it in the Supabase
++-- SQL Editor.
++CREATE INDEX IF NOT EXISTS idx_reports_status        ON reports (status);
++CREATE INDEX IF NOT EXISTS idx_reports_created       ON reports (created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_reports_accident_date ON reports (accident_date);
++CREATE INDEX IF NOT EXISTS idx_reports_reporter      ON reports (reporter_id);
++CREATE INDEX IF NOT EXISTS idx_reports_assigned      ON reports (assigned_to);
++CREATE INDEX IF NOT EXISTS idx_reports_category      ON reports (accident_category_id);
++CREATE INDEX IF NOT EXISTS idx_reports_duplicate_of  ON reports (duplicate_of);
++CREATE INDEX IF NOT EXISTS idx_reports_dup_lookup    ON reports (accident_date) WHERE duplicate_of IS NULL AND status <> 'rejected';
++CREATE INDEX IF NOT EXISTS idx_status_history_report ON report_status_history (report_id);
++CREATE INDEX IF NOT EXISTS idx_audit_created         ON audit_logs (created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_notifications_user    ON notifications (user_id, is_read, created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_report_evidence_report       ON report_evidence (report_id);
++
++ANALYZE;
+diff --git a/Web Road Accident Reporting System/middleware/auth.js b/Web Road Accident Reporting System/middleware/auth.js
+index 015df5b..3d2cb73 100644
+--- a/Web Road Accident Reporting System/middleware/auth.js	
++++ b/Web Road Accident Reporting System/middleware/auth.js	
+@@ -5,6 +5,27 @@ import pool from '../config/db.js';
+ // shortcut: move to a DB table if the API ever runs more than one process
+ const blockedTokenIds = new Set();
+ 
++// Every API call used to run `SELECT ... FROM users` before doing its real work. With the
++// database in Supabase that is one extra network round trip per request, so the result is
++// kept for a few seconds. User.update/remove clear it, so deactivating or changing the role
++// of an account still takes effect immediately.
++const USER_CACHE_MS = 15000;
++const userCache = new Map();
++
++export function clearUserCache(id) {
++  if (id === undefined) userCache.clear();
++  else userCache.delete(Number(id));
++}
++
++async function loadUser(id) {
++  const hit = userCache.get(id);
++  if (hit && hit.expires > Date.now()) return hit.user;
++  const [rows] = await pool.query('SELECT id, name, email, role, phone, is_active FROM users WHERE id = ?', [id]);
++  const user = rows[0] || null;
++  if (user) userCache.set(id, { user, expires: Date.now() + USER_CACHE_MS });
++  return user;
++}
++
+ export function blockToken(token) {
+   if (!token) return;
+   try {
+@@ -26,14 +47,14 @@ export const requireAuth = async (req, res, next) => {
+     if (decoded.jti && blockedTokenIds.has(decoded.jti)) {
+       return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Session has been logged out' } });
+     }
+-    const [rows] = await pool.query('SELECT id, name, email, role, phone, is_active FROM users WHERE id = ?', [decoded.id]);
+-    if (rows.length === 0) {
++    const user = await loadUser(decoded.id);
++    if (!user) {
+       return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
+     }
+-    if (!rows[0].is_active) {
++    if (!user.is_active) {
+       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Account is inactive' } });
+     }
+-    req.user = rows[0];
++    req.user = user;
+     req.token = token;
+     next();
+   } catch (err) {
+diff --git a/Web Road Accident Reporting System/models/User.js b/Web Road Accident Reporting System/models/User.js
+index a655800..ce361c1 100644
+--- a/Web Road Accident Reporting System/models/User.js	
++++ b/Web Road Accident Reporting System/models/User.js	
+@@ -1,5 +1,6 @@
+ import pool from '../config/db.js';
+ import bcrypt from 'bcryptjs';
++import { clearUserCache } from '../middleware/auth.js';
+ 
+ export const User = {
+   async findByEmail(email) {
+@@ -35,6 +36,7 @@ export const User = {
+     return rows;
+   },
+   async update(id, data) {
++    clearUserCache(id);
+     const fields = [];
+     const params = [];
+     if (data.name) { fields.push('name = ?'); params.push(data.name); }
+@@ -84,6 +86,7 @@ export const User = {
+     return this.getLocation(id);
+   },
+   async remove(id) {
++    clearUserCache(id);
+     const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+     return result.affectedRows > 0;
+   },
+diff --git a/Web Road Accident Reporting System/package.json b/Web Road Accident Reporting System/package.json
+index 9a6e124..5ae2985 100644
+--- a/Web Road Accident Reporting System/package.json	
++++ b/Web Road Accident Reporting System/package.json	
+@@ -15,6 +15,7 @@
+   "license": "ISC",
+   "dependencies": {
+     "bcryptjs": "^2.4.3",
++    "compression": "^1.7.4",
+     "cors": "^2.8.5",
+     "dotenv": "^16.4.5",
+     "express": "^4.19.2",
+diff --git a/Web Road Accident Reporting System/routes/summaries.js b/Web Road Accident Reporting System/routes/summaries.js
+index d9d508b..ac4a365 100644
+--- a/Web Road Accident Reporting System/routes/summaries.js	
++++ b/Web Road Accident Reporting System/routes/summaries.js	
+@@ -117,15 +117,16 @@ router.get('/dashboard/stats', async (req, res, next) => {
+       monthlySeries[key] = { current: c, previous: p };
+     }
+ 
+-    const [attention] = await pool.query(`
++    const [[attention], [yearRows]] = await Promise.all([pool.query(`
+       SELECT r.id, r.report_reference, r.title, r.status, r.location, r.created_at, ac.name AS category_name
+       FROM reports r
+       LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+       WHERE r.status IN ('submitted','under_review','needs_clarification') ${filter}
+       ORDER BY r.created_at ASC
+       LIMIT 8
+-    `, filterParams);
+-    const [yearRows] = await pool.query('SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC');
++    `, filterParams),
++      pool.query('SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC')
++    ]);
+ 
+     res.json({
+       meta: { year, compareYear, scope, years: yearRows.map((r) => r.y), scopedTotal: scoped.length },
+diff --git a/Web Road Accident Reporting System/server.js b/Web Road Accident Reporting System/server.js
+index 600e746..314f052 100644
+--- a/Web Road Accident Reporting System/server.js	
++++ b/Web Road Accident Reporting System/server.js	
+@@ -3,6 +3,7 @@ import cors from 'cors';
+ import morgan from 'morgan';
+ import dotenv from 'dotenv';
+ import helmet from 'helmet';
++import compression from 'compression';
+ import rateLimit from 'express-rate-limit';
+ 
+ import authRoutes from './routes/auth.js';
+@@ -26,6 +27,7 @@ if (secret.length < 32 || /change_this|secret_key|changeme/i.test(secret)) {
+ const app = express();
+ 
+ app.use(helmet());
++app.use(compression());
+ // Only the listed origins may call the API from a browser (comma separated in CORS_ORIGIN).
+ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((o) => o.trim());
+ app.use(cors({ origin: allowedOrigins }));
+diff --git a/Web Road Accident Reporting System/tests/latency.mjs b/Web Road Accident Reporting System/tests/latency.mjs
+new file mode 100644
+index 0000000..0b14d0f
+--- /dev/null
++++ b/Web Road Accident Reporting System/tests/latency.mjs	
+@@ -0,0 +1,12 @@
++// Measures how long one round trip to the database takes. Run: node tests/latency.mjs
++// Under ~40 ms: region is fine. 150 ms or more: the Supabase project is far from you.
++import pool from '../config/db.js';
++const t = [];
++for (let i = 0; i < 6; i++) {
++  const s = performance.now();
++  await pool.query('select 1');
++  t.push(performance.now() - s);
++}
++console.log('first query (includes connecting):', t[0].toFixed(0), 'ms');
++console.log('next queries:', t.slice(1).map((x) => x.toFixed(0) + ' ms').join(', '));
++await pool.end();

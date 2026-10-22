@@ -13,6 +13,7 @@ import categoryRoutes from './routes/categories.js';
 import notificationRoutes from './routes/notifications.js';
 import summaryRoutes from './routes/summaries.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import pool from './config/db.js';
 
 dotenv.config();
 
@@ -61,4 +62,6 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  // Pay the connection cost now instead of on the first person's request.
+  pool.warm();
 });

@@ -9,8 +9,10 @@ export const AuditLog = {
     if (entityType) { query += ' AND al.entity_type = ?'; params.push(entityType); }
     query += ' ORDER BY al.created_at DESC LIMIT ? OFFSET ?';
     params.push(Number(limit), (Number(page) - 1) * Number(limit));
-    const [rows] = await pool.query(query, params);
-    const [[{ total }]] = await pool.query('SELECT COUNT(*)::int as total FROM audit_logs', []);
+    const [[rows], [[{ total }]]] = await Promise.all([
+      pool.query(query, params),
+      pool.query('SELECT COUNT(*)::int as total FROM audit_logs', [])
+    ]);
     return { rows, total, page: Number(page), limit: Number(limit) };
   }
 };

@@ -197,10 +197,11 @@ async function notifyStatusChange(report, oldStatus, newStatus, actorId, notes) 
   };
   const actor = actorId === report.reporter_id ? 'You' : 'Admin';
   const message = `${actor} changed status of ${report.report_reference} from ${statusLabels[oldStatus] || oldStatus} to ${statusLabels[newStatus] || newStatus}.${notes ? ` Notes: ${notes}` : ''}`;
-  await Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message });
+  const jobs = [Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message })];
   if (report.assigned_to && report.assigned_to !== actorId && report.assigned_to !== report.reporter_id) {
-    await Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message });
+    jobs.push(Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message }));
   }
+  await Promise.all(jobs);
 }
 
 const STATUSES = ['submitted', 'under_review', 'needs_clarification', 'verified', 'assigned', 'in_progress', 'resolved', 'rejected'];
@@ -246,8 +247,10 @@ router.patch('/reports/:id/verify', async (req, res, next) => {
     } else {
       updated = await Report.updateStatus(report.id, status, req.user.id, { notes: verification_notes || reason });
     }
-    await logAudit(req.user.id, 'VERIFY_REPORT', 'report', report.id, req, { old_status: report.status, new_status: status, verification_notes, ...assignmentAudit });
-    await notifyStatusChange(report, oldStatus, status, req.user.id, verification_notes);
+    await Promise.all([
+      logAudit(req.user.id, 'VERIFY_REPORT', 'report', report.id, req, { old_status: report.status, new_status: status, verification_notes, ...assignmentAudit }),
+      notifyStatusChange(report, oldStatus, status, req.user.id, verification_notes)
+    ]);
     res.json(updated);
   } catch (err) { next(err); }
 });
