@@ -36,6 +36,18 @@ const ADMIN_HINT = {
   rejected: 'This report was rejected. No further changes are possible.'
 };
 
+// Plain-language "what should I do now?" shown at the top of the Review card.
+const REVIEW_GUIDE = {
+  submitted: { title: 'New report: start your review', hint: 'Move it to Under review so other staff can see someone is on it.' },
+  under_review: { title: 'Decide what to do with this report', hint: 'Verify it if the details check out, ask the reporter for more info, or reject it.' },
+  needs_clarification: { title: 'Waiting on the reporter', hint: 'They were asked for more information. Resume your review once they reply.' },
+  verified: { title: 'Verified: assign an officer', hint: 'Pick a traffic officer to investigate. The nearest one is preselected.' },
+  assigned: { title: 'Officer assigned', hint: 'The assigned officer will investigate and update the status.' },
+  in_progress: { title: 'Investigation in progress', hint: 'The assigned officer is working on it.' },
+  resolved: { title: 'Resolved', hint: 'This report is closed. No further changes are possible.' },
+  rejected: { title: 'Rejected', hint: 'This report is closed. No further changes are possible.' }
+};
+
 // Wording and rules for the note dialog that opens for each status change.
 const STATUS_COPY = {
   verified: { title: 'Verify this report', intro: 'Verifying makes this an official record. You can add a note for the history.', label: 'Verification note', submit: 'Verify report', done: 'Report verified.' },
@@ -302,6 +314,22 @@ export default function ReportDetail() {
   const primaryNext = report.status === 'submitted' ? 'under_review' : 'verified';
   const isPrimary = (to) => primaryNext === to && adminCan(to);
 
+  // Only the moves the server would accept right now, in the order an admin would want them.
+  const reviewActions = (() => {
+    const status = (st, label, kind) => ({ key: st, label, kind, run: () => openDialog({ type: 'status', status: st }) });
+    switch (report.status) {
+      case 'submitted': return [status('under_review', 'Start review', 'primary')];
+      case 'under_review': return [
+        status('verified', 'Verify report', 'primary'),
+        status('needs_clarification', 'Ask reporter for more info', 'secondary'),
+        status('rejected', 'Reject report', 'danger')
+      ];
+      case 'needs_clarification': return [status('under_review', 'Resume review', 'primary')];
+      case 'verified': return [{ key: 'assign', label: 'Assign officer', kind: 'primary', run: openAssign }];
+      default: return [];
+    }
+  })();
+
   const pickFile = (e) => {
     const file = e.target.files[0];
     e.target.value = '';
@@ -431,17 +459,38 @@ export default function ReportDetail() {
           </section>
 
           {isAdmin && (
-            <section className="rd-card" aria-label="Admin actions">
-              <h2>Review</h2>
-              <div className="rd-actions">
-                <button type="button" className={`rd-btn${isPrimary('verified') ? ' rd-btn--primary' : ''}`} disabled={!adminCan('verified')} title={adminCan('verified') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'verified' })}>Verify</button>
-                <button type="button" className="rd-btn rd-btn--danger" disabled={!adminCan('rejected')} title={adminCan('rejected') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'rejected' })}>Reject</button>
-                <button type="button" className={`rd-btn${isPrimary('under_review') ? ' rd-btn--primary' : ''}`} disabled={!adminCan('under_review')} title={adminCan('under_review') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'under_review' })}>Under review</button>
-                <button type="button" className="rd-btn" disabled={!adminCan('needs_clarification')} title={adminCan('needs_clarification') ? undefined : blockedTip} onClick={() => openDialog({ type: 'status', status: 'needs_clarification' })}>Needs clarification</button>
+            <section className="rd-card rd-review" aria-label="Admin actions">
+              <div className="rd-card-hd">
+                <h2>Review</h2>
+                <span className={`badge badge-${report.status}`}>{statusLabel(report.status)}</span>
               </div>
-              <button type="button" className={`rd-btn rd-btn--wide${adminCan('assigned') ? ' rd-btn--primary' : ''}`} disabled={!adminCan('assigned')} title={adminCan('assigned') ? undefined : blockedTip} onClick={openAssign}>Assign officer</button>
-              <p className="rd-muted">{ADMIN_HINT[report.status]}</p>
-              <p className="rd-muted">Every change is saved to the history with your note.</p>
+              <p className="rd-next">{REVIEW_GUIDE[report.status]?.title}</p>
+              <p className="rd-muted">{REVIEW_GUIDE[report.status]?.hint || ADMIN_HINT[report.status]}</p>
+
+              {reviewActions.length > 0 && (
+                <div className="rd-review-actions">
+                  {reviewActions.filter((a) => a.kind === 'primary').map((a) => (
+                    <button key={a.key} type="button" className="rd-btn rd-btn--primary rd-btn--wide rd-btn--lg" disabled={statusLoading} onClick={a.run}>{a.label}</button>
+                  ))}
+                  {reviewActions.some((a) => a.kind === 'secondary') && (
+                    <div className="rd-review-more">
+                      {reviewActions.filter((a) => a.kind === 'secondary').map((a) => (
+                        <button key={a.key} type="button" className="rd-btn rd-btn--wide" disabled={statusLoading} onClick={a.run}>{a.label}</button>
+                      ))}
+                    </div>
+                  )}
+                  {reviewActions.filter((a) => a.kind === 'danger').map((a) => (
+                    <button key={a.key} type="button" className="rd-btn rd-btn--danger rd-btn--wide" disabled={statusLoading} onClick={a.run}>{a.label}</button>
+                  ))}
+                </div>
+              )}
+
+              {reviewActions.length === 0 && (
+                <p className="rd-review-done">
+                  {['resolved', 'rejected'].includes(report.status) ? 'No further actions. This report is closed.' : 'Nothing for you to do right now.'}
+                </p>
+              )}
+              <p className="rd-muted rd-review-foot">Every change is saved to the history{reviewActions.length ? ' with your note' : ''}.</p>
             </section>
           )}
 
