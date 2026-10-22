@@ -1,5 +1,5 @@
 import pool from '../config/db.js';
-import { generateReportReference } from '../utils/helpers.js';
+import { generateReportReference, recordStatusHistory } from '../utils/helpers.js';
 import { compareReports } from '../utils/geo.js';
 
 const STATUS_ORDER = ['submitted','under_review','needs_clarification','verified','assigned','in_progress','resolved','rejected'];
@@ -177,31 +177,45 @@ export const Report = {
     if (!current) return null;
     const oldStatus = current.status;
     if (oldStatus === newStatus) return current;
-    await pool.query('UPDATE reports SET status = ? WHERE id = ?', [newStatus, id]);
+    // Everything this status change touches goes into ONE update (it used to be up to
+    // four separate ones, each a round trip).
+    const sets = ['status = ?'];
+    const params = [newStatus];
     if (newStatus === 'assigned' && reason) {
-      await pool.query('UPDATE reports SET assigned_to = ? WHERE id = ?', [reason.assignedTo || null, id]);
+      sets.push('assigned_to = ?');
+      params.push(reason.assignedTo || null);
     }
     if (newStatus === 'verified') {
-      await pool.query('UPDATE reports SET verified_by = ?, verified_at = NOW(), verification_notes = ? WHERE id = ?', [changedBy, reason?.notes || null, id]);
+      sets.push('verified_by = ?', 'verified_at = NOW()', 'verification_notes = ?');
+      params.push(changedBy, reason?.notes || null);
     } else if (newStatus === 'rejected') {
       // A rejected report was never verified, so verified_at stays NULL.
-      await pool.query('UPDATE reports SET verification_notes = ? WHERE id = ?', [reason?.notes || null, id]);
+      sets.push('verification_notes = ?');
+      params.push(reason?.notes || null);
     }
     // Findings are only set when the caller supplies them. They are never cleared by a status change.
     if ((newStatus === 'in_progress' || newStatus === 'resolved') && reason?.findings) {
-      await pool.query('UPDATE reports SET findings = ? WHERE id = ?', [reason.findings, id]);
+      sets.push('findings = ?');
+      params.push(reason.findings);
     }
-    const { recordStatusHistory } = await import('../utils/helpers.js');
-    await recordStatusHistory(id, changedBy, oldStatus, newStatus, reason?.notes || null);
-    return this.findById(id);
+    params.push(id);
+    await pool.query(`UPDATE reports SET ${sets.join(', ')} WHERE id = ?`, params);
+    // The history row and the re-read are independent, so they run together.
+    const [, updated] = await Promise.all([
+      recordStatusHistory(id, changedBy, oldStatus, newStatus, reason?.notes || null),
+      this.findById(id)
+    ]);
+    return updated;
   },
   async assign(id, officerId, changedBy) {
     const current = await this.findById(id);
     if (!current) return null;
     await pool.query('UPDATE reports SET status = ?, assigned_to = ? WHERE id = ?', ['assigned', officerId, id]);
-    const { recordStatusHistory } = await import('../utils/helpers.js');
-    await recordStatusHistory(id, changedBy, current.status, 'assigned', 'Assigned to traffic officer');
-    return this.findById(id);
+    const [, updated] = await Promise.all([
+      recordStatusHistory(id, changedBy, current.status, 'assigned', 'Assigned to traffic officer'),
+      this.findById(id)
+    ]);
+    return updated;
   },
   async addFindings(id, findings, changedBy) {
     await pool.query('UPDATE reports SET findings = ? WHERE id = ?', [findings, id]);

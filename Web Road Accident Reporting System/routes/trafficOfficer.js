@@ -25,10 +25,11 @@ const statusLabels = {
 async function notifyStatusChange(report, oldStatus, newStatus, actorId, notes) {
   const actor = actorId === report.reporter_id ? 'You' : 'Officer';
   const message = `${actor} changed status of ${report.report_reference} from ${statusLabels[oldStatus] || oldStatus} to ${statusLabels[newStatus] || newStatus}.${notes ? ` Notes: ${notes}` : ''}`;
-  await Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message });
+  const jobs = [Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message })];
   if (report.assigned_to && report.assigned_to !== actorId && report.assigned_to !== report.reporter_id) {
-    await Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message });
+    jobs.push(Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message }));
   }
+  await Promise.all(jobs);
 }
 
 // The officer's browser shares where they are, so the admin can be shown who is nearest
@@ -89,8 +90,10 @@ router.patch('/reports/:id/status', async (req, res, next) => {
     }
     const oldStatus = report.status;
     const updated = await Report.updateStatus(report.id, status, req.user.id, { notes: reason });
-    await logAudit(req.user.id, 'UPDATE_STATUS', 'report', report.id, req, { old_status: report.status, new_status: status, reason });
-    await notifyStatusChange(report, oldStatus, status, req.user.id, reason);
+    await Promise.all([
+      logAudit(req.user.id, 'UPDATE_STATUS', 'report', report.id, req, { old_status: report.status, new_status: status, reason }),
+      notifyStatusChange(report, oldStatus, status, req.user.id, reason)
+    ]);
     res.json(updated);
   } catch (err) { next(err); }
 });

@@ -94,7 +94,9 @@ router.get('/dashboard/stats', async (req, res, next) => {
 
     const from = `${Math.min(year, compareYear)}-01-01`;
     const to = `${Math.max(year, compareYear) + 1}-01-01`;
-    const [rows] = await pool.query(`
+    // The yearly rows, the "needs attention" list and the year picker are independent
+    // queries: start all three at once instead of waiting for each in turn.
+    const rowsQuery = pool.query(`
       SELECT r.id, r.report_reference, r.title, r.status, r.injury_status, r.fatalities, r.vehicle_type,
              r.latitude, r.longitude, r.location, r.accident_date, r.accident_time,
              r.verified_at, r.created_at, ac.name AS category_name
@@ -102,6 +104,16 @@ router.get('/dashboard/stats', async (req, res, next) => {
       LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
       WHERE r.created_at >= ? AND r.created_at < ? ${filter}
     `, [from, to, ...filterParams]);
+    const attentionQuery = pool.query(`
+      SELECT r.id, r.report_reference, r.title, r.status, r.location, r.created_at, ac.name AS category_name
+      FROM reports r
+      LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+      WHERE r.status IN ('submitted','under_review','needs_clarification') ${filter}
+      ORDER BY r.created_at ASC
+      LIMIT 8
+    `, filterParams);
+    const yearsQuery = pool.query('SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC');
+    const [[rows], [attention], [yearRows]] = await Promise.all([rowsQuery, attentionQuery, yearsQuery]);
 
     const cur = rows.filter((r) => new Date(r.created_at).getFullYear() === year);
     const scoped = scope === 'all' ? cur : cur.filter(isOfficial);
@@ -116,16 +128,6 @@ router.get('/dashboard/stats', async (req, res, next) => {
       kpis[key] = { value: cs, previous: ps, yoy: yoy(cs, ps) };
       monthlySeries[key] = { current: c, previous: p };
     }
-
-    const [attention] = await pool.query(`
-      SELECT r.id, r.report_reference, r.title, r.status, r.location, r.created_at, ac.name AS category_name
-      FROM reports r
-      LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
-      WHERE r.status IN ('submitted','under_review','needs_clarification') ${filter}
-      ORDER BY r.created_at ASC
-      LIMIT 8
-    `, filterParams);
-    const [yearRows] = await pool.query('SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC');
 
     res.json({
       meta: { year, compareYear, scope, years: yearRows.map((r) => r.y), scopedTotal: scoped.length },

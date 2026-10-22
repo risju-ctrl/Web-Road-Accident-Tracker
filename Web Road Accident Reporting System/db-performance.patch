@@ -1,0 +1,588 @@
+diff --git a/Web Road Accident Reporting System/config/db.js b/Web Road Accident Reporting System/config/db.js
+index e5447ef..579ce7c 100644
+--- a/Web Road Accident Reporting System/config/db.js	
++++ b/Web Road Accident Reporting System/config/db.js	
+@@ -16,6 +16,16 @@ const pool = new pg.Pool({
+   // The connection is still encrypted.
+   ssl: { rejectUnauthorized: false },
+   max: 10,
++  // Opening a connection to a remote database costs several round trips (TCP, TLS,
++  // login), seconds on a long-distance link. node-postgres closes idle connections
++  // after 10 s by default, which made the first request after a short pause as slow
++  // as a cold start. Keep them for 5 min; the heartbeat below keeps a couple warm.
++  idleTimeoutMillis: 5 * 60 * 1000,
++  // Do not hang forever when the database is unreachable.
++  connectionTimeoutMillis: 15000,
++  // TCP keep-alive stops routers and the pooler from silently dropping a quiet socket.
++  keepAlive: true,
++  keepAliveInitialDelayMillis: 10000,
+   // No session time zone is set here on purpose. MySQL ran with timezone=SYSTEM
+   // (Asia/Manila) and the summaries group reports by day and month in SQL, so the
+   // database's default time zone for this role is set to Asia/Manila instead: the
+@@ -59,14 +69,47 @@ async function query(sql, params = []) {
+   try {
+     const result = await pool.query(text, params);
+     if (result.command === 'SELECT') return [result.rows, result.fields];
+-    return [{ insertId: result.rows[0] ? result.rows[0].id : null, affectedRows: result.rowCount }, result.fields];
++    // `rows` holds whatever a RETURNING clause produced, so a write can hand back the
++    // row it touched without a second SELECT (one fewer round trip).
++    return [{ insertId: result.rows[0] ? result.rows[0].id : null, affectedRows: result.rowCount, rows: result.rows }, result.fields];
+   } catch (err) {
+     if (SQLSTATE_TO_MYSQL[err.code]) err.code = SQLSTATE_TO_MYSQL[err.code];
+     throw err;
+   }
+ }
+ 
++// Opens a few connections up front and keeps them used, so a request never has to wait
++// for a new connection. Call once when the server starts. The timer is unref'd so it
++// never keeps a script or test process alive.
++const HOT_CONNECTIONS = Math.max(1, Number(process.env.DB_WARM_CONNECTIONS) || 4);
++const HEARTBEAT_MS = 30 * 1000;
++let heartbeat = null;
++
++async function ping() {
++  // Concurrent queries need separate clients, so this touches HOT_CONNECTIONS of them.
++  // 4 covers the widest fan-out in the app (3 parallel queries on the report page).
++  await Promise.all(Array.from({ length: HOT_CONNECTIONS }, () => pool.query('select 1')));
++}
++
++async function warm() {
++  const started = Date.now();
++  try {
++    await ping();
++    console.log(`database warm: ${HOT_CONNECTIONS} connection(s) ready in ${Date.now() - started} ms`);
++  } catch (err) {
++    console.error('database warm-up failed:', err.message);
++  }
++  if (!heartbeat) {
++    heartbeat = setInterval(() => ping().catch((err) => console.error('database heartbeat failed:', err.message)), HEARTBEAT_MS);
++    heartbeat.unref();
++  }
++}
++
+ export default {
+   query,
+-  end: () => pool.end()
++  warm,
++  end: () => {
++    if (heartbeat) clearInterval(heartbeat);
++    return pool.end();
++  }
+ };
+diff --git a/Web Road Accident Reporting System/database/migrations/005_postgres_indexes.sql b/Web Road Accident Reporting System/database/migrations/005_postgres_indexes.sql
+new file mode 100644
+index 0000000..4226ec6
+--- /dev/null
++++ b/Web Road Accident Reporting System/database/migrations/005_postgres_indexes.sql	
+@@ -0,0 +1,34 @@
++-- Postgres (Supabase). Run once in the Supabase SQL editor. Safe to re-run.
++--
++-- migrations/003_report_indexes.sql was written for MySQL; Postgres does NOT create
++-- indexes for foreign keys by itself, so unless these were added by hand every filter,
++-- join and "my reports / my notifications" lookup below is a full table scan.
++-- Check what already exists with:
++--   select tablename, indexname from pg_indexes where schemaname = 'public' order by 1, 2;
++
++-- reports: the list/filter/dashboard/map queries
++CREATE INDEX IF NOT EXISTS idx_reports_created        ON reports (created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_reports_status_created ON reports (status, created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_reports_reporter       ON reports (reporter_id, created_at DESC);   -- reporter's own list
++CREATE INDEX IF NOT EXISTS idx_reports_assigned       ON reports (assigned_to, created_at DESC);   -- officer's list, open_cases
++CREATE INDEX IF NOT EXISTS idx_reports_category       ON reports (accident_category_id);
++CREATE INDEX IF NOT EXISTS idx_reports_accident_date  ON reports (accident_date);                  -- duplicate check
++CREATE INDEX IF NOT EXISTS idx_reports_duplicate_of   ON reports (duplicate_of);
++CREATE INDEX IF NOT EXISTS idx_reports_verified_by    ON reports (verified_by);
++
++-- report detail page: one lookup per table
++CREATE INDEX IF NOT EXISTS idx_evidence_report        ON report_evidence (report_id);
++CREATE INDEX IF NOT EXISTS idx_evidence_uploader      ON report_evidence (uploader_id);
++CREATE INDEX IF NOT EXISTS idx_history_report         ON report_status_history (report_id, changed_at DESC);
++CREATE INDEX IF NOT EXISTS idx_history_changed_by     ON report_status_history (changed_by);
++
++-- notifications: polled every 30 s by every signed-in browser
++CREATE INDEX IF NOT EXISTS idx_notif_user_created     ON notifications (user_id, created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_notif_user_unread      ON notifications (user_id) WHERE is_read = false;
++CREATE INDEX IF NOT EXISTS idx_notif_report           ON notifications (report_id);
++
++-- audit log page
++CREATE INDEX IF NOT EXISTS idx_audit_created          ON audit_logs (created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_audit_user             ON audit_logs (user_id);
++
++ANALYZE;
+diff --git a/Web Road Accident Reporting System/middleware/auth.js b/Web Road Accident Reporting System/middleware/auth.js
+index 015df5b..41ac229 100644
+--- a/Web Road Accident Reporting System/middleware/auth.js	
++++ b/Web Road Accident Reporting System/middleware/auth.js	
+@@ -1,5 +1,6 @@
+ import jwt from 'jsonwebtoken';
+ import pool from '../config/db.js';
++import { getCachedUser, cacheUser } from '../utils/userCache.js';
+ 
+ // Token ids invalidated by logout. In-memory, so a server restart clears it.
+ // shortcut: move to a DB table if the API ever runs more than one process
+@@ -26,14 +27,20 @@ export const requireAuth = async (req, res, next) => {
+     if (decoded.jti && blockedTokenIds.has(decoded.jti)) {
+       return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Session has been logged out' } });
+     }
+-    const [rows] = await pool.query('SELECT id, name, email, role, phone, is_active FROM users WHERE id = ?', [decoded.id]);
+-    if (rows.length === 0) {
+-      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
++    // Served from memory for a few seconds; see utils/userCache.js for when it is refreshed.
++    let user = getCachedUser(decoded.id);
++    if (!user) {
++      const [rows] = await pool.query('SELECT id, name, email, role, phone, is_active FROM users WHERE id = ?', [decoded.id]);
++      if (rows.length === 0) {
++        return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
++      }
++      user = rows[0];
++      cacheUser(decoded.id, user);
+     }
+-    if (!rows[0].is_active) {
++    if (!user.is_active) {
+       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Account is inactive' } });
+     }
+-    req.user = rows[0];
++    req.user = user;
+     req.token = token;
+     next();
+   } catch (err) {
+diff --git a/Web Road Accident Reporting System/models/AuditLog.js b/Web Road Accident Reporting System/models/AuditLog.js
+index 00e3fcf..e91f590 100644
+--- a/Web Road Accident Reporting System/models/AuditLog.js	
++++ b/Web Road Accident Reporting System/models/AuditLog.js	
+@@ -9,8 +9,10 @@ export const AuditLog = {
+     if (entityType) { query += ' AND al.entity_type = ?'; params.push(entityType); }
+     query += ' ORDER BY al.created_at DESC LIMIT ? OFFSET ?';
+     params.push(Number(limit), (Number(page) - 1) * Number(limit));
+-    const [rows] = await pool.query(query, params);
+-    const [[{ total }]] = await pool.query('SELECT COUNT(*)::int as total FROM audit_logs', []);
++    const [[rows], [[{ total }]]] = await Promise.all([
++      pool.query(query, params),
++      pool.query('SELECT COUNT(*)::int as total FROM audit_logs', [])
++    ]);
+     return { rows, total, page: Number(page), limit: Number(limit) };
+   }
+ };
+diff --git a/Web Road Accident Reporting System/models/Notification.js b/Web Road Accident Reporting System/models/Notification.js
+index f6f7c69..51dad69 100644
+--- a/Web Road Accident Reporting System/models/Notification.js	
++++ b/Web Road Accident Reporting System/models/Notification.js	
+@@ -2,11 +2,12 @@ import pool from '../config/db.js';
+ 
+ export const Notification = {
+   async create({ userId, reportId, event, message }) {
++    // RETURNING * hands back the new row, so no second SELECT round trip is needed.
+     const [result] = await pool.query(
+-      'INSERT INTO notifications (user_id, report_id, event, message) VALUES (?, ?, ?, ?)',
++      'INSERT INTO notifications (user_id, report_id, event, message) VALUES (?, ?, ?, ?) RETURNING *',
+       [userId, reportId, event, message]
+     );
+-    return this.findById(result.insertId);
++    return result.rows[0];
+   },
+   async findById(id) {
+     const [rows] = await pool.query('SELECT * FROM notifications WHERE id = ?', [id]);
+@@ -18,17 +19,22 @@ export const Notification = {
+     if (unreadOnly) { query += ' AND n.is_read = false'; }
+     query += ' ORDER BY n.created_at DESC LIMIT ? OFFSET ?';
+     params.push(Number(limit), (Number(page) - 1) * Number(limit));
+-    const [rows] = await pool.query(query, params);
+-    const [[{ total }]] = await pool.query('SELECT COUNT(*)::int as total FROM notifications WHERE user_id = ?' + (unreadOnly ? ' AND is_read = false' : ''), [userId]);
++    // The page and the count do not depend on each other, so they run side by side.
++    const [[rows], [[{ total }]]] = await Promise.all([
++      pool.query(query, params),
++      pool.query('SELECT COUNT(*)::int as total FROM notifications WHERE user_id = ?' + (unreadOnly ? ' AND is_read = false' : ''), [userId])
++    ]);
+     return { rows, total, page: Number(page), limit: Number(limit) };
+   },
+   async markRead(id, userId) {
+-    // Ownership check first so marking someone else's notification returns "not found",
+-    // and marking an already-read notification stays idempotent.
+-    const [rows] = await pool.query('SELECT id FROM notifications WHERE id = ? AND user_id = ?', [id, userId]);
+-    if (rows.length === 0) return null;
+-    await pool.query('UPDATE notifications SET is_read = true, read_at = NOW() WHERE id = ? AND user_id = ?', [id, userId]);
+-    return this.findById(id);
++    // One statement: the user_id condition is the ownership check (someone else's
++    // notification matches no row, so the caller gets "not found"), and COALESCE keeps
++    // the original read time when it is marked again.
++    const [result] = await pool.query(
++      'UPDATE notifications SET is_read = true, read_at = COALESCE(read_at, NOW()) WHERE id = ? AND user_id = ? RETURNING *',
++      [id, userId]
++    );
++    return result.rows[0] || null;
+   },
+   async markAllRead(userId) {
+     await pool.query('UPDATE notifications SET is_read = true, read_at = NOW() WHERE user_id = ? AND is_read = false', [userId]);
+diff --git a/Web Road Accident Reporting System/models/Report.js b/Web Road Accident Reporting System/models/Report.js
+index d5c8f0d..adf43f2 100644
+--- a/Web Road Accident Reporting System/models/Report.js	
++++ b/Web Road Accident Reporting System/models/Report.js	
+@@ -1,5 +1,5 @@
+ import pool from '../config/db.js';
+-import { generateReportReference } from '../utils/helpers.js';
++import { generateReportReference, recordStatusHistory } from '../utils/helpers.js';
+ import { compareReports } from '../utils/geo.js';
+ 
+ const STATUS_ORDER = ['submitted','under_review','needs_clarification','verified','assigned','in_progress','resolved','rejected'];
+@@ -177,31 +177,45 @@ export const Report = {
+     if (!current) return null;
+     const oldStatus = current.status;
+     if (oldStatus === newStatus) return current;
+-    await pool.query('UPDATE reports SET status = ? WHERE id = ?', [newStatus, id]);
++    // Everything this status change touches goes into ONE update (it used to be up to
++    // four separate ones, each a round trip).
++    const sets = ['status = ?'];
++    const params = [newStatus];
+     if (newStatus === 'assigned' && reason) {
+-      await pool.query('UPDATE reports SET assigned_to = ? WHERE id = ?', [reason.assignedTo || null, id]);
++      sets.push('assigned_to = ?');
++      params.push(reason.assignedTo || null);
+     }
+     if (newStatus === 'verified') {
+-      await pool.query('UPDATE reports SET verified_by = ?, verified_at = NOW(), verification_notes = ? WHERE id = ?', [changedBy, reason?.notes || null, id]);
++      sets.push('verified_by = ?', 'verified_at = NOW()', 'verification_notes = ?');
++      params.push(changedBy, reason?.notes || null);
+     } else if (newStatus === 'rejected') {
+       // A rejected report was never verified, so verified_at stays NULL.
+-      await pool.query('UPDATE reports SET verification_notes = ? WHERE id = ?', [reason?.notes || null, id]);
++      sets.push('verification_notes = ?');
++      params.push(reason?.notes || null);
+     }
+     // Findings are only set when the caller supplies them. They are never cleared by a status change.
+     if ((newStatus === 'in_progress' || newStatus === 'resolved') && reason?.findings) {
+-      await pool.query('UPDATE reports SET findings = ? WHERE id = ?', [reason.findings, id]);
++      sets.push('findings = ?');
++      params.push(reason.findings);
+     }
+-    const { recordStatusHistory } = await import('../utils/helpers.js');
+-    await recordStatusHistory(id, changedBy, oldStatus, newStatus, reason?.notes || null);
+-    return this.findById(id);
++    params.push(id);
++    await pool.query(`UPDATE reports SET ${sets.join(', ')} WHERE id = ?`, params);
++    // The history row and the re-read are independent, so they run together.
++    const [, updated] = await Promise.all([
++      recordStatusHistory(id, changedBy, oldStatus, newStatus, reason?.notes || null),
++      this.findById(id)
++    ]);
++    return updated;
+   },
+   async assign(id, officerId, changedBy) {
+     const current = await this.findById(id);
+     if (!current) return null;
+     await pool.query('UPDATE reports SET status = ?, assigned_to = ? WHERE id = ?', ['assigned', officerId, id]);
+-    const { recordStatusHistory } = await import('../utils/helpers.js');
+-    await recordStatusHistory(id, changedBy, current.status, 'assigned', 'Assigned to traffic officer');
+-    return this.findById(id);
++    const [, updated] = await Promise.all([
++      recordStatusHistory(id, changedBy, current.status, 'assigned', 'Assigned to traffic officer'),
++      this.findById(id)
++    ]);
++    return updated;
+   },
+   async addFindings(id, findings, changedBy) {
+     await pool.query('UPDATE reports SET findings = ? WHERE id = ?', [findings, id]);
+diff --git a/Web Road Accident Reporting System/models/User.js b/Web Road Accident Reporting System/models/User.js
+index a655800..68b4c1e 100644
+--- a/Web Road Accident Reporting System/models/User.js	
++++ b/Web Road Accident Reporting System/models/User.js	
+@@ -1,5 +1,6 @@
+ import pool from '../config/db.js';
+ import bcrypt from 'bcryptjs';
++import { invalidateUser } from '../utils/userCache.js';
+ 
+ export const User = {
+   async findByEmail(email) {
+@@ -50,6 +51,8 @@ export const User = {
+     if (fields.length === 0) return this.findById(id);
+     params.push(id);
+     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, params);
++    // Role / active flag changes must apply on the very next request.
++    invalidateUser(id);
+     return this.findById(id);
+   },
+   // Active officers with the position they last shared and how many cases they carry.
+@@ -85,6 +88,7 @@ export const User = {
+   },
+   async remove(id) {
+     const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
++    invalidateUser(id);
+     return result.affectedRows > 0;
+   },
+   async verifyPassword(user, password) {
+diff --git a/Web Road Accident Reporting System/package.json b/Web Road Accident Reporting System/package.json
+index 9a6e124..3d416e9 100644
+--- a/Web Road Accident Reporting System/package.json	
++++ b/Web Road Accident Reporting System/package.json	
+@@ -8,7 +8,7 @@
+     "start": "node server.js",
+     "dev": "nodemon server.js",
+     "seed": "node database/seed.js",
+-    "test": "node --test tests/workflow.test.js tests/geo.test.js"
++    "test": "node --test tests/workflow.test.js tests/geo.test.js tests/userCache.test.js"
+   },
+   "keywords": [],
+   "author": "",
+diff --git a/Web Road Accident Reporting System/routes/admin.js b/Web Road Accident Reporting System/routes/admin.js
+index cc39007..cc6d4c5 100644
+--- a/Web Road Accident Reporting System/routes/admin.js	
++++ b/Web Road Accident Reporting System/routes/admin.js	
+@@ -197,10 +197,11 @@ async function notifyStatusChange(report, oldStatus, newStatus, actorId, notes)
+   };
+   const actor = actorId === report.reporter_id ? 'You' : 'Admin';
+   const message = `${actor} changed status of ${report.report_reference} from ${statusLabels[oldStatus] || oldStatus} to ${statusLabels[newStatus] || newStatus}.${notes ? ` Notes: ${notes}` : ''}`;
+-  await Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message });
++  const jobs = [Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message })];
+   if (report.assigned_to && report.assigned_to !== actorId && report.assigned_to !== report.reporter_id) {
+-    await Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message });
++    jobs.push(Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message }));
+   }
++  await Promise.all(jobs);
+ }
+ 
+ const STATUSES = ['submitted', 'under_review', 'needs_clarification', 'verified', 'assigned', 'in_progress', 'resolved', 'rejected'];
+@@ -246,8 +247,10 @@ router.patch('/reports/:id/verify', async (req, res, next) => {
+     } else {
+       updated = await Report.updateStatus(report.id, status, req.user.id, { notes: verification_notes || reason });
+     }
+-    await logAudit(req.user.id, 'VERIFY_REPORT', 'report', report.id, req, { old_status: report.status, new_status: status, verification_notes, ...assignmentAudit });
+-    await notifyStatusChange(report, oldStatus, status, req.user.id, verification_notes);
++    await Promise.all([
++      logAudit(req.user.id, 'VERIFY_REPORT', 'report', report.id, req, { old_status: report.status, new_status: status, verification_notes, ...assignmentAudit }),
++      notifyStatusChange(report, oldStatus, status, req.user.id, verification_notes)
++    ]);
+     res.json(updated);
+   } catch (err) { next(err); }
+ });
+diff --git a/Web Road Accident Reporting System/routes/reports.js b/Web Road Accident Reporting System/routes/reports.js
+index a66e1d4..b31c524 100644
+--- a/Web Road Accident Reporting System/routes/reports.js	
++++ b/Web Road Accident Reporting System/routes/reports.js	
+@@ -50,19 +50,22 @@ router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
+     }
+ 
+     const report = await Report.create(data, req.user.id, { duplicateOf: linkedTo ? linkedTo.id : null });
+-    await logAudit(req.user.id, 'CREATE_REPORT', 'report', report.id, req, {
+-      report_reference: report.report_reference,
+-      ...(linkedTo ? { duplicate_of: linkedTo.report_reference } : {}),
+-      ...(matches.length > 0 && !linkedTo ? { confirmed_distinct_from: matches.map((m) => m.report_reference) } : {})
+-    });
+-    await Notification.create({
+-      userId: req.user.id,
+-      reportId: report.id,
+-      event: 'report.submitted',
+-      message: linkedTo
+-        ? `Your report ${report.report_reference} has been submitted and linked to ${linkedTo.report_reference}, the same accident.`
+-        : `Your report ${report.report_reference} has been submitted.`
+-    });
++    // The audit entry and the notification do not depend on each other.
++    await Promise.all([
++      logAudit(req.user.id, 'CREATE_REPORT', 'report', report.id, req, {
++        report_reference: report.report_reference,
++        ...(linkedTo ? { duplicate_of: linkedTo.report_reference } : {}),
++        ...(matches.length > 0 && !linkedTo ? { confirmed_distinct_from: matches.map((m) => m.report_reference) } : {})
++      }),
++      Notification.create({
++        userId: req.user.id,
++        reportId: report.id,
++        event: 'report.submitted',
++        message: linkedTo
++          ? `Your report ${report.report_reference} has been submitted and linked to ${linkedTo.report_reference}, the same accident.`
++          : `Your report ${report.report_reference} has been submitted.`
++      })
++    ]);
+     res.status(201).json(report);
+   } catch (err) { next(err); }
+ });
+@@ -81,9 +84,12 @@ router.get('/:id', async (req, res, next) => {
+     if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+     if (req.user.role === 'reporter' && report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+     if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+-    const evidence = await Evidence.findByReport(report.id);
+-    const history = await StatusHistory.findByReport(report.id);
+-    const duplicates = req.user.role === 'admin' ? await Report.listDuplicates(report.id) : [];
++    // Three independent lookups: run them together, not one after another.
++    const [evidence, history, duplicates] = await Promise.all([
++      Evidence.findByReport(report.id),
++      StatusHistory.findByReport(report.id),
++      req.user.role === 'admin' ? Report.listDuplicates(report.id) : []
++    ]);
+     res.json({ ...report, evidence, status_history: history, duplicates });
+   } catch (err) { next(err); }
+ });
+@@ -98,13 +104,15 @@ router.patch('/:id', requireRole('reporter', 'admin'), async (req, res, next) =>
+       if (!['submitted','needs_clarification'].includes(report.status)) return res.status(422).json({ error: { code: 'INVALID_STATUS', message: 'Cannot edit in current status' } });
+     }
+     const updated = await Report.update(report.id, req.body, req.user);
+-    await logAudit(req.user.id, 'UPDATE_REPORT', 'report', report.id, req, req.body);
+-    await Notification.create({
+-      userId: report.reporter_id,
+-      reportId: report.id,
+-      event: 'report.updated',
+-      message: `Your report ${report.report_reference} was updated${isOwner ? '' : ' by an administrator'}.`
+-    });
++    await Promise.all([
++      logAudit(req.user.id, 'UPDATE_REPORT', 'report', report.id, req, req.body),
++      Notification.create({
++        userId: report.reporter_id,
++        reportId: report.id,
++        event: 'report.updated',
++        message: `Your report ${report.report_reference} was updated${isOwner ? '' : ' by an administrator'}.`
++      })
++    ]);
+     // Supplying the requested information itself moves the report back to Under Review.
+     if (isOwner && report.status === 'needs_clarification') {
+       const backUnderReview = await Report.updateStatus(report.id, 'under_review', req.user.id, {
+diff --git a/Web Road Accident Reporting System/routes/summaries.js b/Web Road Accident Reporting System/routes/summaries.js
+index d9d508b..08c982e 100644
+--- a/Web Road Accident Reporting System/routes/summaries.js	
++++ b/Web Road Accident Reporting System/routes/summaries.js	
+@@ -94,7 +94,9 @@ router.get('/dashboard/stats', async (req, res, next) => {
+ 
+     const from = `${Math.min(year, compareYear)}-01-01`;
+     const to = `${Math.max(year, compareYear) + 1}-01-01`;
+-    const [rows] = await pool.query(`
++    // The yearly rows, the "needs attention" list and the year picker are independent
++    // queries: start all three at once instead of waiting for each in turn.
++    const rowsQuery = pool.query(`
+       SELECT r.id, r.report_reference, r.title, r.status, r.injury_status, r.fatalities, r.vehicle_type,
+              r.latitude, r.longitude, r.location, r.accident_date, r.accident_time,
+              r.verified_at, r.created_at, ac.name AS category_name
+@@ -102,6 +104,16 @@ router.get('/dashboard/stats', async (req, res, next) => {
+       LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+       WHERE r.created_at >= ? AND r.created_at < ? ${filter}
+     `, [from, to, ...filterParams]);
++    const attentionQuery = pool.query(`
++      SELECT r.id, r.report_reference, r.title, r.status, r.location, r.created_at, ac.name AS category_name
++      FROM reports r
++      LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
++      WHERE r.status IN ('submitted','under_review','needs_clarification') ${filter}
++      ORDER BY r.created_at ASC
++      LIMIT 8
++    `, filterParams);
++    const yearsQuery = pool.query('SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC');
++    const [[rows], [attention], [yearRows]] = await Promise.all([rowsQuery, attentionQuery, yearsQuery]);
+ 
+     const cur = rows.filter((r) => new Date(r.created_at).getFullYear() === year);
+     const scoped = scope === 'all' ? cur : cur.filter(isOfficial);
+@@ -117,16 +129,6 @@ router.get('/dashboard/stats', async (req, res, next) => {
+       monthlySeries[key] = { current: c, previous: p };
+     }
+ 
+-    const [attention] = await pool.query(`
+-      SELECT r.id, r.report_reference, r.title, r.status, r.location, r.created_at, ac.name AS category_name
+-      FROM reports r
+-      LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+-      WHERE r.status IN ('submitted','under_review','needs_clarification') ${filter}
+-      ORDER BY r.created_at ASC
+-      LIMIT 8
+-    `, filterParams);
+-    const [yearRows] = await pool.query('SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int AS y FROM reports ORDER BY y DESC');
+-
+     res.json({
+       meta: { year, compareYear, scope, years: yearRows.map((r) => r.y), scopedTotal: scoped.length },
+       kpis,
+diff --git a/Web Road Accident Reporting System/routes/trafficOfficer.js b/Web Road Accident Reporting System/routes/trafficOfficer.js
+index 6839af5..53ffdd2 100644
+--- a/Web Road Accident Reporting System/routes/trafficOfficer.js	
++++ b/Web Road Accident Reporting System/routes/trafficOfficer.js	
+@@ -25,10 +25,11 @@ const statusLabels = {
+ async function notifyStatusChange(report, oldStatus, newStatus, actorId, notes) {
+   const actor = actorId === report.reporter_id ? 'You' : 'Officer';
+   const message = `${actor} changed status of ${report.report_reference} from ${statusLabels[oldStatus] || oldStatus} to ${statusLabels[newStatus] || newStatus}.${notes ? ` Notes: ${notes}` : ''}`;
+-  await Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message });
++  const jobs = [Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message })];
+   if (report.assigned_to && report.assigned_to !== actorId && report.assigned_to !== report.reporter_id) {
+-    await Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message });
++    jobs.push(Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message }));
+   }
++  await Promise.all(jobs);
+ }
+ 
+ // The officer's browser shares where they are, so the admin can be shown who is nearest
+@@ -89,8 +90,10 @@ router.patch('/reports/:id/status', async (req, res, next) => {
+     }
+     const oldStatus = report.status;
+     const updated = await Report.updateStatus(report.id, status, req.user.id, { notes: reason });
+-    await logAudit(req.user.id, 'UPDATE_STATUS', 'report', report.id, req, { old_status: report.status, new_status: status, reason });
+-    await notifyStatusChange(report, oldStatus, status, req.user.id, reason);
++    await Promise.all([
++      logAudit(req.user.id, 'UPDATE_STATUS', 'report', report.id, req, { old_status: report.status, new_status: status, reason }),
++      notifyStatusChange(report, oldStatus, status, req.user.id, reason)
++    ]);
+     res.json(updated);
+   } catch (err) { next(err); }
+ });
+diff --git a/Web Road Accident Reporting System/server.js b/Web Road Accident Reporting System/server.js
+index 600e746..8022a62 100644
+--- a/Web Road Accident Reporting System/server.js	
++++ b/Web Road Accident Reporting System/server.js	
+@@ -13,6 +13,7 @@ import categoryRoutes from './routes/categories.js';
+ import notificationRoutes from './routes/notifications.js';
+ import summaryRoutes from './routes/summaries.js';
+ import { errorHandler } from './middleware/errorHandler.js';
++import pool from './config/db.js';
+ 
+ dotenv.config();
+ 
+@@ -61,4 +62,6 @@ app.use(errorHandler);
+ const PORT = process.env.PORT || 5000;
+ app.listen(PORT, () => {
+   console.log(`Server running on http://localhost:${PORT}`);
++  // Pay the connection cost now instead of on the first person's request.
++  pool.warm();
+ });
+diff --git a/Web Road Accident Reporting System/tests/userCache.test.js b/Web Road Accident Reporting System/tests/userCache.test.js
+new file mode 100644
+index 0000000..f4555c5
+--- /dev/null
++++ b/Web Road Accident Reporting System/tests/userCache.test.js	
+@@ -0,0 +1,14 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { getCachedUser, cacheUser, invalidateUser } from '../utils/userCache.js';
++
++test('a cached user is returned until it is invalidated', () => {
++  cacheUser(7, { id: 7, role: 'reporter', is_active: true });
++  assert.equal(getCachedUser(7).role, 'reporter');
++  invalidateUser(7);
++  assert.equal(getCachedUser(7), null);
++});
++
++test('an unknown user is a cache miss', () => {
++  assert.equal(getCachedUser(999999), null);
++});
+diff --git a/Web Road Accident Reporting System/utils/userCache.js b/Web Road Accident Reporting System/utils/userCache.js
+new file mode 100644
+index 0000000..49cb67b
+--- /dev/null
++++ b/Web Road Accident Reporting System/utils/userCache.js	
+@@ -0,0 +1,29 @@
++// Short-lived in-memory cache of the user row that requireAuth loads on every request.
++// Without it each API call pays one extra database round trip just to learn who is
++// calling. Anything that changes a user's role, active flag or details must call
++// invalidateUser(id) so the change takes effect on the next request (User.update and
++// User.remove do). Changes made directly in the Supabase dashboard are picked up when
++// the entry expires (AUTH_CACHE_TTL_MS, default 30 s; set 0 to turn the cache off).
++// Like the logout block-list in middleware/auth.js this is per process.
++const TTL_MS = process.env.AUTH_CACHE_TTL_MS !== undefined ? Number(process.env.AUTH_CACHE_TTL_MS) : 30 * 1000;
++const MAX_ENTRIES = 1000;
++const entries = new Map();
++
++export function getCachedUser(id) {
++  if (!(TTL_MS > 0)) return null;
++  const hit = entries.get(id);
++  if (!hit) return null;
++  if (hit.expires < Date.now()) { entries.delete(id); return null; }
++  return hit.user;
++}
++
++export function cacheUser(id, user) {
++  if (!(TTL_MS > 0)) return;
++  if (entries.size >= MAX_ENTRIES) entries.clear();
++  entries.set(id, { user, expires: Date.now() + TTL_MS });
++}
++
++export function invalidateUser(id) {
++  entries.delete(Number(id));
++  entries.delete(String(id));
++}
