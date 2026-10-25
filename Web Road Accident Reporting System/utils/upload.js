@@ -1,12 +1,22 @@
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { randomUUID } from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
-// Evidence uploads: only these types are accepted. The type is decided by the file's
-// own bytes, never by the name or Content-Type the client sent.
-export const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
-fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+const BUCKET = process.env.SUPABASE_BUCKET || 'evidence';
+
+// Created on first use so .env is already loaded by then.
+let client;
+function getClient() {
+  if (!client) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set');
+    }
+    client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false }
+    });
+  }
+  return client;
+}
 
 const ALLOWED = {
   'image/jpeg': '.jpg',
@@ -25,14 +35,9 @@ export function detectType(buf) {
   return null;
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_ROOT),
-  // Random name, no client-controlled path or extension.
-  filename: (req, file, cb) => cb(null, randomUUID())
-});
-
+// Files are held in memory just long enough to check them and send them to Supabase Storage.
 export const evidenceUpload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 1 },
   fileFilter: (req, file, cb) => {
     if (!ALLOWED[file.mimetype]) {
@@ -45,23 +50,31 @@ export const evidenceUpload = multer({
   }
 });
 
-// Runs after multer: re-checks the saved bytes, stores the verified type, deletes bad files.
+// Re-checks the real bytes of the upload and stores the verified type.
 export function verifyUploadedFile(req, res, next) {
   if (!req.file) return next();
-  try {
-    const fd = fs.openSync(req.file.path, 'r');
-    const head = Buffer.alloc(16);
-    const n = fs.readSync(fd, head, 0, 16, 0);
-    fs.closeSync(fd);
-    const real = detectType(head.subarray(0, n));
-    if (!real || !ALLOWED[real]) {
-      fs.unlink(req.file.path, () => {});
-      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'The file content does not match an allowed type (JPG, PNG, WebP or PDF)' } });
-    }
-    req.file.mimetype = real;
-    next();
-  } catch (err) {
-    fs.unlink(req.file.path, () => {});
-    next(err);
+  const real = detectType(req.file.buffer.subarray(0, 16));
+  if (!real || !ALLOWED[real]) {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'The file content does not match an allowed type (JPG, PNG, WebP or PDF)' } });
   }
+  req.file.mimetype = real;
+  next();
+}
+
+// Saves the file to the bucket and returns its storage key (random name, no client input).
+export async function saveToStorage(file) {
+  const key = `${randomUUID()}${ALLOWED[file.mimetype]}`;
+  const { error } = await getClient().storage.from(BUCKET).upload(key, file.buffer, {
+    contentType: file.mimetype,
+    upsert: false
+  });
+  if (error) throw error;
+  return key;
+}
+
+// Returns the file as a Buffer, or null if it is not in the bucket.
+export async function readFromStorage(key) {
+  const { data, error } = await getClient().storage.from(BUCKET).download(key);
+  if (error || !data) return null;
+  return Buffer.from(await data.arrayBuffer());
 }

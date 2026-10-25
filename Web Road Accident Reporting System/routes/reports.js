@@ -1,13 +1,11 @@
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
 import { Report } from '../models/Report.js';
 import { Evidence } from '../models/Evidence.js';
 import { StatusHistory } from '../models/StatusHistory.js';
 import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../utils/helpers.js';
-import { evidenceUpload, verifyUploadedFile, UPLOAD_ROOT, IMAGE_TYPES } from '../utils/upload.js';
+import { evidenceUpload, verifyUploadedFile, saveToStorage, readFromStorage, IMAGE_TYPES } from '../utils/upload.js';
 
 const router = express.Router();
 
@@ -134,10 +132,9 @@ router.get('/:id/evidence/:evidenceId', async (req, res, next) => {
     if (!evidence || evidence.report_id !== report.id) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence not found' } });
     }
-    // Files live on disk outside the web root and are only streamed after this authorization check.
-    const filePath = path.resolve(process.cwd(), evidence.file_path);
-    if (!filePath.startsWith(UPLOAD_ROOT + path.sep)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence file is missing from storage' } });
+    // Files live in Supabase Storage and are only sent after this authorization check.
+    const buf = await readFromStorage(evidence.file_path);
+    if (!buf) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence file is missing from storage' } });
     // Only verified images are shown inline. Everything else is forced to download, and a
     // sandbox CSP stops any content from running even if a type check were ever bypassed.
     const isImage = IMAGE_TYPES.includes(evidence.mime_type);
@@ -145,7 +142,7 @@ router.get('/:id/evidence/:evidenceId', async (req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Content-Disposition', `${isImage ? 'inline' : 'attachment'}; filename="${String(evidence.file_name).replace(/["\r\n\\]/g, '')}"`);
-    fs.createReadStream(filePath).on('error', next).pipe(res);
+    res.send(buf);
   } catch (err) { next(err); }
 });
 
@@ -156,11 +153,12 @@ router.post('/:id/evidence', requireRole('reporter', 'admin', 'traffic_officer')
     if (req.user.role === 'reporter' && report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (!req.file) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'No file uploaded' } });
+    const storageKey = await saveToStorage(req.file);
     const evidence = await Evidence.create({
       reportId: report.id,
       uploaderId: req.user.id,
       fileName: req.file.originalname,
-      filePath: req.file.path,
+      filePath: storageKey,
       mimeType: req.file.mimetype,
       description: req.body.description
     });
