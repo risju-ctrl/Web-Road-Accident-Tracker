@@ -26,6 +26,9 @@ if (secret.length < 32 || /change_this|secret_key|changeme/i.test(secret)) {
 
 const app = express();
 
+// Render sits behind a proxy; this lets the rate limiter see each visitor's real IP.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 // Only the listed origins may call the API from a browser (comma separated in CORS_ORIGIN).
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((o) => o.trim());
