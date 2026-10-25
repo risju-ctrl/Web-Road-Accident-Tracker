@@ -101,6 +101,13 @@
   border-radius: 14px;
 }
 
+/* Dark is the default: show the dark lockup, hide the light one. In light mode
+   swap them. The light lockup is transparent, so it drops the dark logo's
+   rounded tile and sits directly on the card. */
+.agap-lockup-light { display: none; }
+:root[data-theme='light'] .agap-lockup-dark { display: none; }
+:root[data-theme='light'] .agap-lockup-light { display: block; border-radius: 0; }
+
 /* Map rail badge. */
 .mp-brand { overflow: hidden; }
 .mp-brand img { width: 100%; height: 100%; object-fit: cover; display: block; }
