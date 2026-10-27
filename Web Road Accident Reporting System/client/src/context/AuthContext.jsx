@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { getToken, saveToken, clearToken } from '../services/token';
 
 const AuthContext = createContext(null);
 
@@ -19,7 +20,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (token) {
       api.defaults.headers.common.Authorization = `Bearer ${token}`;
       refreshUser();
@@ -28,10 +29,10 @@ export function AuthProvider({ children }) {
     }
   }, [refreshUser]);
 
-  const login = async (email, password) => {
+  const login = async (email, password, remember = true) => {
     const res = await api.post('/auth/login', { email, password });
     const { user, token } = res.data;
-    localStorage.setItem('token', token);
+    saveToken(token, remember);
     api.defaults.headers.common.Authorization = `Bearer ${token}`;
     setUser(user);
     return user;
@@ -40,7 +41,7 @@ export function AuthProvider({ children }) {
   const logout = () => {
     // Ask the server to invalidate the token; ignore failures so signing out locally always works.
     api.post('/auth/logout').catch(() => {});
-    localStorage.removeItem('token');
+    clearToken();
     delete api.defaults.headers.common.Authorization;
     setUser(null);
   };

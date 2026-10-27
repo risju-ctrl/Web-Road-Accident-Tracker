@@ -7,7 +7,10 @@ const api = axios.create({
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401) {
+    // A 401 from the login request itself means "wrong credentials", not "session
+    // expired". Redirecting there would reload the page and wipe the error message.
+    const isLoginRequest = String(err.config?.url || '').includes('/auth/login');
+    if (err.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('token');
       delete api.defaults.headers.common.Authorization;
       window.location.href = '/login';

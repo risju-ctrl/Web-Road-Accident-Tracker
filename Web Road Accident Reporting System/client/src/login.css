@@ -1,0 +1,502 @@
+/* Sign-in page. The layout and palette come from the standalone
+   Road_Accident_Tracker_Sign_in.html mock, which uses the AGAP gold lockup and
+   Space Grotesk, so it drops onto this app without a second brand.
+
+   Every class is prefixed lgn- on purpose: the mock relies on generic selectors
+   (input, label, body) that would otherwise restyle the rest of the app, and the
+   app's own global rules would bleed the other way. Prefixing keeps the two
+   apart even though the import order of the two stylesheets is not guaranteed. */
+
+.lgn-page {
+  --lgn-bg: #121212;
+  --lgn-surface: #1e1e1c;
+  --lgn-graphite: #2a2a28;
+  --lgn-champagne: #e9ddaa;
+  --lgn-gold: #c9a45c;
+  --lgn-text: #e8e6e0;
+  --lgn-muted: #a09d94;
+  --lgn-line: #343430;
+  --lgn-line2: #4a4a44;
+  --lgn-error: #e08a7e;
+  --lgn-on: #121212;
+  --lgn-field: #121212;
+  --lgn-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 2.05fr) minmax(400px, 1fr);
+  background: var(--lgn-bg);
+  color: var(--lgn-text);
+  font-family: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme='light'] .lgn-page {
+  --lgn-bg: #eeebe3;
+  --lgn-surface: #fbfaf6;
+  --lgn-graphite: #e9e5da;
+  --lgn-champagne: #6b4a12;
+  --lgn-gold: #86611c;
+  --lgn-text: #1f1c15;
+  --lgn-muted: #6a6558;
+  --lgn-line: #dad5c7;
+  --lgn-line2: #b9b2a0;
+  --lgn-error: #b3382a;
+  --lgn-on: #ffffff;
+  --lgn-field: #ffffff;
+}
+
+.lgn-page :focus-visible {
+  outline: 2px solid var(--lgn-champagne);
+  outline-offset: 2px;
+}
+
+/* Motion. --d staggers each element up the panel on first paint. */
+.lgn-rise {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: lgn-rise 0.6s var(--lgn-ease) var(--d, 0ms) forwards;
+}
+@keyframes lgn-rise { to { opacity: 1; transform: none; } }
+
+.lgn-fade {
+  opacity: 0;
+  animation: lgn-fade 0.8s var(--lgn-ease) var(--d, 0ms) forwards;
+}
+@keyframes lgn-fade { to { opacity: 1; } }
+
+/* ---- visual column ---- */
+.lgn-visual {
+  position: relative;
+  overflow: hidden;
+  background: var(--lgn-bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 56px 56px;
+  min-height: 100vh;
+}
+.lgn-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* Only the brand and the tagline sit above the scene; the canvas, the CSS
+   fallback grid and the pin label keep the positioning they set themselves. */
+.lgn-visual > .lgn-brand,
+.lgn-visual > .lgn-tag { position: relative; z-index: 1; }
+
+/* Fade the top and bottom of the scene into the page so its edges never show. */
+.lgn-visual:before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 130px;
+  background: linear-gradient(var(--lgn-bg), transparent);
+  z-index: 0;
+  pointer-events: none;
+}
+.lgn-visual:after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 46%;
+  background: linear-gradient(transparent, var(--lgn-bg) 88%);
+  pointer-events: none;
+}
+
+.lgn-brand { display: flex; align-items: center; gap: 12px; }
+.lgn-brand .agap-lockup { width: clamp(150px, 16vw, 200px); height: auto; }
+
+.lgn-plabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  opacity: 0;
+  font-size: 13px;
+  font-weight: 500;
+  padding-left: 9px;
+  border-left: 1.5px solid var(--lgn-gold);
+  white-space: nowrap;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.lgn-tag h2 {
+  font-size: clamp(30px, 3.4vw, 52px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--lgn-text);
+}
+.lgn-tag h2 span { display: block; }
+.lgn-tag h2 .lgn-gold { color: var(--lgn-champagne); }
+
+/* ---- form column ---- */
+.lgn-panel {
+  background:
+    radial-gradient(110% 55% at 50% 0%, color-mix(in srgb, var(--lgn-champagne) 8%, transparent), transparent 65%),
+    var(--lgn-surface);
+  border-left: 1px solid var(--lgn-line);
+  display: flex;
+  align-items: center;
+  padding: 48px clamp(32px, 5vw, 72px);
+}
+.lgn-box { width: 100%; max-width: 360px; }
+
+.lgn-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 26px;
+}
+.lgn-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 9px;
+  border: 1px solid var(--lgn-line);
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lgn-muted);
+  letter-spacing: 0.02em;
+}
+.lgn-eyebrow svg { color: var(--lgn-champagne); }
+
+/* Reuses the app's ThemeToggle so the saved choice is the same one the rest of
+   the site reads; only the shape is restyled to match the mock. */
+.lgn-top .theme-toggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border-color: var(--lgn-line);
+  background: transparent;
+  color: var(--lgn-muted);
+}
+.lgn-top .theme-toggle:hover {
+  background: var(--lgn-graphite);
+  border-color: var(--lgn-line2);
+  color: var(--lgn-text);
+}
+
+.lgn-title {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  color: var(--lgn-text);
+}
+.lgn-lead { color: var(--lgn-muted); font-size: 14.5px; margin-bottom: 28px; }
+
+/* ---- fields ---- */
+.lgn-field { margin-bottom: 16px; }
+.lgn-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--lgn-text);
+}
+.lgn-wrap { position: relative; }
+
+.lgn-input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--lgn-line);
+  background: var(--lgn-field);
+  color: var(--lgn-text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s var(--lgn-ease), box-shadow 0.2s var(--lgn-ease);
+}
+.lgn-input:hover { border-color: var(--lgn-line2); }
+.lgn-input:focus {
+  border-color: var(--lgn-champagne);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lgn-champagne) 20%, transparent);
+}
+.lgn-input[aria-invalid='true'] { border-color: var(--lgn-error); }
+.lgn-input[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lgn-error) 20%, transparent);
+}
+.lgn-input.lgn-with-icon { padding-left: 42px; }
+#lgn-pw { padding-right: 48px; }
+
+.lgn-ic {
+  position: absolute;
+  left: 14px;
+  top: 23px;
+  transform: translateY(-50%);
+  color: var(--lgn-muted);
+  pointer-events: none;
+  transition: color 0.2s;
+}
+.lgn-wrap:focus-within .lgn-ic { color: var(--lgn-champagne); }
+
+.lgn-eye {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lgn-muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: color 0.2s, background-color 0.2s;
+}
+.lgn-eye:hover { color: var(--lgn-text); background: var(--lgn-graphite); }
+.lgn-eye svg {
+  grid-area: 1 / 1;
+  transition: opacity 0.2s var(--lgn-ease), transform 0.2s var(--lgn-ease);
+}
+.lgn-eye .lgn-eye-off { opacity: 0; transform: scale(0.8); }
+.lgn-eye[aria-pressed='true'] .lgn-eye-on { opacity: 0; transform: scale(0.8); }
+.lgn-eye[aria-pressed='true'] .lgn-eye-off { opacity: 1; transform: none; }
+
+/* Field errors expand and collapse without a layout jump. */
+.lgn-msg {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s var(--lgn-ease);
+}
+.lgn-msg > div { overflow: hidden; min-height: 0; }
+.lgn-msg.lgn-show { grid-template-rows: 1fr; }
+.lgn-msg p {
+  font-size: 13px;
+  color: var(--lgn-error);
+  padding-top: 6px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.25s var(--lgn-ease), transform 0.25s var(--lgn-ease);
+}
+.lgn-msg.lgn-show p { opacity: 1; transform: none; }
+.lgn-msg p.lgn-hint {
+  color: var(--lgn-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- alert ---- */
+.lgn-alert {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s var(--lgn-ease);
+}
+.lgn-alert > div { overflow: hidden; min-height: 0; }
+.lgn-alert.lgn-show { grid-template-rows: 1fr; }
+.lgn-alert > div > div {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--lgn-error) 45%, transparent);
+  border-left: 3px solid var(--lgn-error);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--lgn-error) 9%, transparent);
+  font-size: 13.5px;
+}
+.lgn-alert svg { flex: none; margin-top: 2px; color: var(--lgn-error); }
+.lgn-alert.lgn-alert-info { --lgn-error: var(--lgn-champagne); }
+
+/* ---- actions ---- */
+.lgn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 18px;
+  font-size: 13.5px;
+}
+.lgn-remember {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--lgn-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.lgn-remember .lgn-check {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid var(--lgn-line2);
+  background: var(--lgn-field);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  accent-color: auto;
+}
+.lgn-remember .lgn-check:checked {
+  background: var(--lgn-champagne);
+  border-color: var(--lgn-champagne);
+}
+.lgn-remember .lgn-check:checked:after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border: 2px solid var(--lgn-on);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+.lgn-remember .lgn-check:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lgn-champagne) 25%, transparent);
+}
+
+.lgn-link {
+  border: 0;
+  background: none;
+  padding: 2px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--lgn-champagne);
+  cursor: pointer;
+  border-radius: 4px;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.2s;
+}
+.lgn-link:hover { text-decoration-color: currentColor; }
+
+.lgn-go {
+  width: 100%;
+  height: 48px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lgn-champagne);
+  color: var(--lgn-on);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background-color 0.2s var(--lgn-ease), transform 0.12s var(--lgn-ease);
+}
+.lgn-go:hover:not(:disabled) { background: var(--lgn-gold); }
+.lgn-go:active:not(:disabled) { transform: translateY(1px) scale(0.995); }
+.lgn-go:disabled { cursor: progress; background: var(--lgn-gold); opacity: 1; }
+
+.lgn-spin {
+  width: 16px;
+  height: 16px;
+  border: 2px solid;
+  border-color: currentColor currentColor currentColor transparent;
+  border-radius: 50%;
+  display: none;
+  animation: lgn-rot 0.7s linear infinite;
+}
+@keyframes lgn-rot { to { transform: rotate(360deg); } }
+.lgn-go[aria-busy='true'] .lgn-spin { display: block; }
+.lgn-arrow { transition: transform 0.2s var(--lgn-ease); }
+.lgn-go:hover:not(:disabled) .lgn-arrow { transform: translateX(3px); }
+.lgn-go[aria-busy='true'] .lgn-arrow { display: none; }
+
+.lgn-foot {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--lgn-line);
+  font-size: 12.5px;
+  color: var(--lgn-muted);
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+.lgn-foot svg { flex: none; margin-top: 2px; color: var(--lgn-champagne); }
+
+.lgn-signup { margin-top: 14px; font-size: 13.5px; color: var(--lgn-muted); text-align: center; }
+.lgn-signup a {
+  color: var(--lgn-champagne);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.2s;
+}
+.lgn-signup a:hover { text-decoration-color: currentColor; }
+
+/* ---- without WebGL: a static CSS-3D road grid with the gold route ---- */
+.lgn-fb { display: none; position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+.lgn-no3d .lgn-fb { display: block; }
+.lgn-no3d .lgn-art { display: none; }
+.lgn-fb i {
+  position: absolute;
+  left: 8%;
+  top: 14%;
+  width: 130%;
+  height: 130%;
+  transform: perspective(900px) rotateX(58deg) rotateZ(-32deg);
+  background:
+    repeating-linear-gradient(0deg, transparent 0 84px, var(--lgn-graphite) 84px 100px),
+    repeating-linear-gradient(90deg, transparent 0 84px, var(--lgn-graphite) 84px 100px);
+}
+.lgn-fb i:after {
+  content: '';
+  position: absolute;
+  left: 46%;
+  top: 38%;
+  width: 4px;
+  height: 34%;
+  background: var(--lgn-gold);
+  box-shadow: 0 0 14px rgba(201, 164, 92, 0.45);
+}
+
+/* ---- responsive ---- */
+@media (max-width: 1180px) {
+  .lgn-page { grid-template-columns: minmax(0, 1.4fr) minmax(380px, 1fr); }
+  .lgn-visual { padding: 32px 36px 44px; }
+}
+
+@media (max-width: 900px) {
+  .lgn-page { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .lgn-visual { min-height: 0; height: 190px; padding: 22px 20px; }
+  .lgn-tag,
+  .lgn-plabel { display: none; }
+  .lgn-panel {
+    border-left: 0;
+    border-top: 1px solid var(--lgn-line);
+    align-items: flex-start;
+    padding: 32px 20px 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lgn-page *,
+  .lgn-page *:before,
+  .lgn-page *:after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .lgn-rise,
+  .lgn-fade { opacity: 1; transform: none; }
+}
